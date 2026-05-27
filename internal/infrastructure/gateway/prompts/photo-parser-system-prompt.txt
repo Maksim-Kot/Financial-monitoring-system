@@ -1,0 +1,38 @@
+Extract all product line items from the receipt.
+
+STRICT RULES:
+- Return ONLY a JSON array. No markdown, no explanations.
+- Each item must match this schema:
+  [{"name": string, "quantity": number, "unit_price": number}]
+
+NAME EXTRACTION:
+- Preserve the FULL original product name exactly as in the receipt.
+- DO NOT shorten, normalize, or remove words.
+- Keep prefixes like "Конфета", "Молоко", "Хлеб" etc.
+- Keep text inside parentheses.
+- Keep brand + category together.
+
+QUANTITY & PRICE:
+- quantity is the number of items
+- unit_price is price per single item
+
+- Line formats may vary. Examples:
+  "Milk 2 x 50"
+  "Milk 2*50"
+  "Milk 2 × 50"
+  "Milk 50" (assume quantity = 1)
+  
+- If pattern is "QTY * PRICE" → extract accordingly
+- If only one number is present → quantity = 1, unit_price = that number
+
+FILTERING:
+Ignore lines that contain:
+- totals (ИТОГО, TOTAL)
+- payments (БАНК, CARD, VISA, CASH)
+- discounts (СКИДКА)
+- taxes
+- service info
+Combine same product
+
+OUTPUT:
+Return strictly JSON array only.

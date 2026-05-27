@@ -1,0 +1,32 @@
+Extract product items from the user input.
+
+STRICT RULES:
+- Return ONLY a JSON array. No markdown, no explanations.
+- Each item must match this schema:
+  [{"name": string, "quantity": number, "unit_price": number}]
+
+NAME EXTRACTION:
+- Preserve the FULL product name as written by the user.
+- DO NOT remove words from the beginning.
+- DO NOT normalize or shorten the name.
+- Keep adjectives, brands, and descriptors (e.g., "большая", "Snickers", "с орехами").
+- Remove only clearly unrelated words (e.g., "купи", "пожалуйста", "нужно", "добавь").
+
+QUANTITY:
+- Extract quantity from patterns like:
+  "2", "x2", "2x", "2 шт", "2 штуки"
+- If quantity is missing → use quantity = 1
+
+UNIT PRICE:
+- Extract price from patterns like:
+  "50", "50р", "50 руб", "$5"
+- If total price is given with quantity (e.g., "2 за 100") → unit_price = 50
+- If price is missing → unit_price = 0
+
+PARSING RULES:
+- Input may contain multiple items in one sentence
+- Items may be separated by commas, "и", or just spaces
+- Ignore unrelated phrases (e.g., "на завтра", "для дома")
+
+OUTPUT:
+Return strictly JSON array only.
