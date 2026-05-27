@@ -17,7 +17,11 @@ type UseCasesContainer struct {
 	AddOrganisation  shared.UseCase[usecase.AddOrganisationUseCaseRequest, usecase.AddOrganisationUseCaseResponse]
 	FinalizeScenario shared.UseCase[usecase.FinalizeScenarioUseCaseRequest, usecase.FinalizeScenarioUseCaseResponse]
 	ListScenario     shared.UseCase[usecase.ListScenarioUseCaseRequest, usecase.ListScenarioUseCaseResponse]
-	CancelScenario   shared.UseCase[usecase.CancelScenarioUseCaseRequest, usecase.CancelScenarioUseCaseResponse]
+
+	ListOrganisations shared.UseCase[usecase.ListOrganisationsUseCaseRequest, usecase.ListOrganisationsUseCaseResponse]
+	SaveOrganisation  shared.UseCase[usecase.SaveOrganisationUseCaseRequest, usecase.SaveOrganisationUseCaseResponse]
+
+	CancelScenario shared.UseCase[usecase.CancelScenarioUseCaseRequest, usecase.CancelScenarioUseCaseResponse]
 }
 
 type UseCasesContainerConfig struct {
@@ -79,20 +83,33 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		PurchaseRepository: cfg.Repositories.Purchases,
 	})
 
+	listOrganisationsUseCase := usecase.NewListOrganisationsUseCase(&usecase.ListOrganisationsUseCaseConfig{
+		Logger:                 cfg.Logger,
+		OrganisationRepository: cfg.Repositories.Organisations,
+	})
+
+	saveOrganisationUseCase := usecase.NewSaveOrganisationUseCase(&usecase.SaveOrganisationUseCaseConfig{
+		Logger:                 cfg.Logger,
+		OrganisationRepository: cfg.Repositories.Organisations,
+		TxManager:              cfg.Repositories.TxManager,
+	})
+
 	cancelScenarioUseCase := usecase.NewCancelScenarioUseCase(&usecase.CancelScenarioUseCaseConfig{
 		Logger:          cfg.Logger,
 		StateRepository: cfg.Repositories.UserState,
 	})
 
 	return &UseCasesContainer{
-		EnsureCategories: ensureCategoriesUseCase,
-		TextScenario:     textScenarioUseCase,
-		PhotoScenario:    photoScenarioUseCase,
-		ClassifyCategory: classifyCategoryUseCase,
-		AddPurchaseDate:  addPurchaseDateUseCase,
-		AddOrganisation:  addOrganisationUseCase,
-		FinalizeScenario: finalizeScenarioUseCase,
-		ListScenario:     listScenarioUseCase,
-		CancelScenario:   cancelScenarioUseCase,
+		EnsureCategories:  ensureCategoriesUseCase,
+		TextScenario:      textScenarioUseCase,
+		PhotoScenario:     photoScenarioUseCase,
+		ClassifyCategory:  classifyCategoryUseCase,
+		AddPurchaseDate:   addPurchaseDateUseCase,
+		AddOrganisation:   addOrganisationUseCase,
+		FinalizeScenario:  finalizeScenarioUseCase,
+		ListScenario:      listScenarioUseCase,
+		ListOrganisations: listOrganisationsUseCase,
+		SaveOrganisation:  saveOrganisationUseCase,
+		CancelScenario:    cancelScenarioUseCase,
 	}
 }
