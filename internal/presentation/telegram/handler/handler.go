@@ -13,6 +13,8 @@ import (
 const (
 	purchasesPerPage      = 3
 	maxSavedOrganisations = 10
+	editPurchasesPerPage  = 1 // Show 1 purchase at a time for editing
+	editJumpStep          = 5 // Jump 5 positions forward/backward
 )
 
 type HandlerConfig struct {

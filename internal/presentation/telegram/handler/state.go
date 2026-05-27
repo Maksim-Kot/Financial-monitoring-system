@@ -18,6 +18,15 @@ const (
 	stepWaitSaveOrg      userStep = "wait_save_org"
 	stepWaitManualItem   userStep = "wait_manual_item"
 	stepWaitAddMoreItem  userStep = "wait_add_more_item"
+
+	// Edit scenario steps
+	stepEditSelectYear     userStep = "edit_select_year"
+	stepEditSelectMonth    userStep = "edit_select_month"
+	stepEditSelectPurchase userStep = "edit_select_purchase"
+	stepEditSelectExpense  userStep = "edit_select_expense"
+	stepEditName           userStep = "edit_name"
+	stepEditQuantity       userStep = "edit_quantity"
+	stepEditPrice          userStep = "edit_price"
 )
 
 type listPaginationState struct {
@@ -41,18 +50,46 @@ type analyticsState struct {
 	Summary    entity.Summary
 }
 
+type editState struct {
+	// Available periods loaded once at the start
+	AvailablePeriods []PeriodInfo
+	// Selected period
+	SelectedYear  int
+	SelectedMonth int
+	// Current purchase being viewed
+	PurchaseID valueobject.UUID
+	Offset     int
+	Total      int
+	MessageID  int
+	// Expense being edited
+	ExpenseID valueobject.UUID
+	// Intermediate edit values
+	NewName     string
+	NewQuantity float64
+	// Original expense values for reference and keyboard suggestions
+	OriginalExpenseName string
+	OriginalUnitPrice   string
+}
+
+type PeriodInfo struct {
+	Year   int
+	Months []int
+}
+
 type State struct {
 	userSteps         map[int64]userStep
 	listStates        map[int64]listPaginationState
 	saveOrgStates     map[int64]saveOrgData
 	manualItemsStates map[int64]manualItemsData
 	analyticsStates   map[int64]analyticsState
+	editStates        map[int64]editState
 
 	stepsMu       sync.RWMutex
 	listMu        sync.RWMutex
 	saveOrgMu     sync.RWMutex
 	manualItemsMu sync.RWMutex
 	analyticsMu   sync.RWMutex
+	editMu        sync.RWMutex
 }
 
 func NewState() *State {
@@ -62,6 +99,7 @@ func NewState() *State {
 		saveOrgStates:     make(map[int64]saveOrgData),
 		manualItemsStates: make(map[int64]manualItemsData),
 		analyticsStates:   make(map[int64]analyticsState),
+		editStates:        make(map[int64]editState),
 	}
 }
 
@@ -176,4 +214,26 @@ func (s *State) ClearAnalytics(userID int64) {
 	s.analyticsMu.Lock()
 	defer s.analyticsMu.Unlock()
 	delete(s.analyticsStates, userID)
+}
+
+// Edit State
+
+func (s *State) GetEditState(userID int64) (editState, bool) {
+	s.editMu.RLock()
+	defer s.editMu.RUnlock()
+
+	data, ok := s.editStates[userID]
+	return data, ok
+}
+
+func (s *State) SetEditState(userID int64, data editState) {
+	s.editMu.Lock()
+	defer s.editMu.Unlock()
+	s.editStates[userID] = data
+}
+
+func (s *State) ClearEditState(userID int64) {
+	s.editMu.Lock()
+	defer s.editMu.Unlock()
+	delete(s.editStates, userID)
 }
