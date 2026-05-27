@@ -2,6 +2,9 @@ package handler
 
 import (
 	"sync"
+
+	"fms-project/internal/domain/entity"
+	"fms-project/internal/domain/valueobject"
 )
 
 type userStep string
@@ -32,11 +35,18 @@ type manualItemsData struct {
 	MessageID int
 }
 
+type analyticsState struct {
+	MessageID  int
+	PeriodType valueobject.PeriodType
+	Summary    entity.Summary
+}
+
 type State struct {
 	userSteps         map[int64]userStep
 	listStates        map[int64]listPaginationState
 	saveOrgStates     map[int64]saveOrgData
 	manualItemsStates map[int64]manualItemsData
+	analyticsStates   map[int64]analyticsState
 
 	stepsMu       sync.RWMutex
 	listMu        sync.RWMutex
@@ -51,6 +61,7 @@ func NewState() *State {
 		listStates:        make(map[int64]listPaginationState),
 		saveOrgStates:     make(map[int64]saveOrgData),
 		manualItemsStates: make(map[int64]manualItemsData),
+		analyticsStates:   make(map[int64]analyticsState),
 	}
 }
 
@@ -143,4 +154,26 @@ func (s *State) ClearManualItemsData(userID int64) {
 	s.manualItemsMu.Lock()
 	defer s.manualItemsMu.Unlock()
 	delete(s.manualItemsStates, userID)
+}
+
+// Analytics Data
+
+func (s *State) GetAnalytics(userID int64) (analyticsState, bool) {
+	s.analyticsMu.RLock()
+	defer s.analyticsMu.RUnlock()
+
+	data, ok := s.analyticsStates[userID]
+	return data, ok
+}
+
+func (s *State) SetAnalytics(userID int64, data analyticsState) {
+	s.analyticsMu.Lock()
+	defer s.analyticsMu.Unlock()
+	s.analyticsStates[userID] = data
+}
+
+func (s *State) ClearAnalytics(userID int64) {
+	s.analyticsMu.Lock()
+	defer s.analyticsMu.Unlock()
+	delete(s.analyticsStates, userID)
 }

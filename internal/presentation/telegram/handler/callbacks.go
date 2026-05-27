@@ -5,6 +5,7 @@ import (
 
 	"fms-project/internal/application/usecase"
 	domainError "fms-project/internal/domain/shared/domain-error"
+	"fms-project/internal/domain/valueobject"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -19,6 +20,16 @@ const (
 	callbackSaveOrgNo  callbackAction = "save_org_no"
 	callbackAddMoreYes callbackAction = "add_more_yes"
 	callbackAddMoreNo  callbackAction = "add_more_no"
+
+	// Analytics callbacks
+	callbackStatsDay         callbackAction = "stats_day"
+	callbackStatsWeek        callbackAction = "stats_week"
+	callbackStatsMonth       callbackAction = "stats_month"
+	callbackStatsHalfYear    callbackAction = "stats_half_year"
+	callbackStatsDetailedYes callbackAction = "stats_detailed_yes"
+	callbackStatsBack        callbackAction = "stats_back"
+	callbackStatsOtherPeriod callbackAction = "stats_other_period"
+	callbackStatsClose       callbackAction = "stats_close"
 )
 
 func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQuery) {
@@ -39,6 +50,16 @@ func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQ
 		h.handleSaveOrgCallback(ctx, q, userID, chatID, messageID, action)
 	case callbackAddMoreYes, callbackAddMoreNo:
 		h.handleAddMoreCallback(ctx, q, userID, chatID, messageID, action)
+	case callbackStatsDay, callbackStatsWeek, callbackStatsMonth, callbackStatsHalfYear:
+		h.handleStatsPeriodCallback(ctx, q, userID, chatID, messageID, action)
+	case callbackStatsDetailedYes:
+		h.handleStatsDetailedCallback(ctx, q, userID, chatID, messageID)
+	case callbackStatsBack:
+		h.handleStatsBackCallback(ctx, q, userID, chatID, messageID)
+	case callbackStatsOtherPeriod:
+		h.handleStatsOtherPeriodCallback(ctx, q, userID, chatID, messageID)
+	case callbackStatsClose:
+		h.handleStatsCloseCallback(ctx, q, userID, chatID, messageID)
 	default:
 		h.answerCallback(q.ID, "Неизвестная команда")
 	}
@@ -170,6 +191,132 @@ func (h *Handler) handleAddMoreCallback(ctx context.Context, q *tgbotapi.Callbac
 
 		h.state.SetStep(userID, stepWaitDate)
 	}
+}
+
+// ==================== Analytics Callback Handlers ====================
+
+func (h *Handler) handleStatsPeriodCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int, action callbackAction) {
+	var periodType valueobject.PeriodType
+	switch action {
+	case callbackStatsDay:
+		periodType = valueobject.PeriodTypeDay
+	case callbackStatsWeek:
+		periodType = valueobject.PeriodTypeWeek
+	case callbackStatsMonth:
+		periodType = valueobject.PeriodTypeMonth
+	case callbackStatsHalfYear:
+		periodType = valueobject.PeriodTypeHalfYear
+	default:
+		h.answerCallback(q.ID, "Неизвестный период")
+		return
+	}
+
+	// Get Level 1 analytics (Summary)
+	out, err := h.useCases.GetAnalytics.Execute(ctx, usecase.GetAnalyticsUseCaseRequest{
+		UserID:     userID,
+		PeriodType: periodType,
+		Detailed:   false,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get analytics", "error", err)
+		h.answerCallback(q.ID, "Ошибка получения данных")
+		return
+	}
+
+	// Save state for later
+	h.state.SetAnalytics(userID, analyticsState{
+		MessageID:  messageID,
+		PeriodType: periodType,
+		Summary:    out.Summary,
+	})
+
+	// Display summary with prompt for detailed view
+	message := buildSummaryMessage(out.Summary)
+	keyboard := buildDetailedPromptKeyboard()
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, message)
+	edit.ReplyMarkup = &keyboard
+	h.bot.Send(edit)
+	h.answerCallback(q.ID, "")
+}
+
+func (h *Handler) handleStatsDetailedCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+	state, exists := h.state.GetAnalytics(userID)
+	if !exists || state.MessageID != messageID {
+		h.answerCallback(q.ID, "Сессия устарела")
+		return
+	}
+
+	// Get Level 2 analytics (Detailed)
+	out, err := h.useCases.GetAnalytics.Execute(ctx, usecase.GetAnalyticsUseCaseRequest{
+		UserID:     userID,
+		PeriodType: state.PeriodType,
+		Detailed:   true,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get detailed analytics", "error", err)
+		h.answerCallback(q.ID, "Ошибка получения данных")
+		return
+	}
+
+	if out.Detailed == nil {
+		// No detailed data available
+		keyboard := buildNoDataKeyboard()
+		edit := tgbotapi.NewEditMessageText(chatID, messageID, "Нет данных для подробного анализа")
+		edit.ReplyMarkup = &keyboard
+		h.bot.Send(edit)
+		h.answerCallback(q.ID, "")
+		return
+	}
+
+	// Display detailed report
+	message := buildDetailedMessage(*out.Detailed)
+	keyboard := buildDetailedNavigationKeyboard()
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, message)
+	edit.ReplyMarkup = &keyboard
+	h.bot.Send(edit)
+	h.answerCallback(q.ID, "")
+}
+
+func (h *Handler) handleStatsBackCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+	_ = ctx
+	state, exists := h.state.GetAnalytics(userID)
+	if !exists || state.MessageID != messageID {
+		h.answerCallback(q.ID, "Сессия устарела")
+		return
+	}
+
+	// Go back to summary view
+	message := buildSummaryMessage(state.Summary)
+	keyboard := buildDetailedPromptKeyboard()
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, message)
+	edit.ReplyMarkup = &keyboard
+	h.bot.Send(edit)
+	h.answerCallback(q.ID, "")
+}
+
+func (h *Handler) handleStatsOtherPeriodCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+	_ = ctx
+	// Clear current state and show period selection
+	h.state.ClearAnalytics(userID)
+
+	keyboard := buildPeriodSelectionKeyboard()
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, "📊 Выберите период для аналитики:")
+	edit.ReplyMarkup = &keyboard
+	h.bot.Send(edit)
+	h.answerCallback(q.ID, "")
+}
+
+func (h *Handler) handleStatsCloseCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+	_ = ctx
+	h.state.ClearAnalytics(userID)
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, "Аналитика закрыта")
+	edit.ReplyMarkup = nil
+	h.bot.Send(edit)
+	h.answerCallback(q.ID, "")
 }
 
 func (h *Handler) answerCallback(callbackID, text string) {
