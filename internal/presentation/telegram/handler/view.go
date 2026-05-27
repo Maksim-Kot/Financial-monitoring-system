@@ -85,13 +85,6 @@ func buildListKeyboard(offset, total int) tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
-func formatQuantity(v float64) string {
-	if v == float64(int64(v)) {
-		return strconv.FormatInt(int64(v), 10)
-	}
-	return strconv.FormatFloat(v, 'f', -1, 64)
-}
-
 func buildOrganisationsReplyKeyboard(organisations []entity.Organisation) tgbotapi.ReplyKeyboardMarkup {
 	var rows [][]tgbotapi.KeyboardButton
 
@@ -129,11 +122,153 @@ func buildAddMoreKeyboard() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+// ==================== Analytics View Builders ====================
+
+func buildPeriodSelectionKeyboard() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📅 День", string(callbackStatsDay)),
+			tgbotapi.NewInlineKeyboardButtonData("📅 Неделя", string(callbackStatsWeek)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📅 Месяц", string(callbackStatsMonth)),
+			tgbotapi.NewInlineKeyboardButtonData("📅 Полгода", string(callbackStatsHalfYear)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("❌ Отмена", string(callbackStatsClose)),
+		),
+	)
+}
+
+func buildSummaryMessage(summary entity.Summary) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "📊 Аналитика: %s\n\n", summary.Period.Format())
+	fmt.Fprintf(&b, "💰 Общие расходы: %s\n", formatMoney(summary.Total))
+	fmt.Fprintf(&b, "   %d покупок • %d позиций\n\n", summary.PurchaseCount, summary.ExpenseCount)
+
+	if len(summary.TopCategories) > 0 {
+		b.WriteString("🏆 Топ категорий:\n")
+		for _, cat := range summary.TopCategories {
+			icon := cat.CategoryIcon
+			if icon == "" {
+				icon = "📦"
+			}
+			fmt.Fprintf(&b, "   %s %s — %s (%s)\n",
+				icon, cat.CategoryName, formatMoney(cat.Total), formatPercentage(cat.Percentage))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(summary.TopPurchases) > 0 {
+		b.WriteString("💎 Самые крупные покупки:\n")
+		for i, p := range summary.TopPurchases {
+			fmt.Fprintf(&b, "   %d. %s — %s (%s)\n",
+				i+1, p.OrganisationName,
+				formatMoney(p.Total), p.PurchaseDate.Format("02.01"))
+		}
+	}
+
+	return b.String()
+}
+
+func buildDetailedMessage(report entity.DetailedReport) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "📊 Детальный анализ: %s\n\n", report.Summary.Period.Format())
+
+	// Comparison section
+	fmt.Fprintf(&b, "📈 Сравнение с %s:\n", report.Comparison.PreviousPeriod.Format())
+	fmt.Fprintf(&b, "   Текущий: %s\n", formatMoney(report.Comparison.CurrentTotal))
+	fmt.Fprintf(&b, "   Предыдущий: %s\n", formatMoney(report.Comparison.PreviousTotal))
+	fmt.Fprintf(&b, "   Изменение: %s\n\n", formatDelta(report.Comparison.DeltaPercent))
+
+	// Category deltas
+	increases, decreases := separateDeltas(report.CategoryDeltas)
+
+	if len(increases) > 0 {
+		b.WriteString("📊 Что выросло:\n")
+		for _, d := range increases[:min(3, len(increases))] {
+			fmt.Fprintf(&b, "   • %s %s (%s → %s)\n",
+				d.CategoryName, formatDelta(d.DeltaPercent),
+				formatMoney(d.PreviousTotal), formatMoney(d.CurrentTotal))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(decreases) > 0 {
+		b.WriteString("📉 Что сократилось:\n")
+		for _, d := range decreases[:min(3, len(decreases))] {
+			fmt.Fprintf(&b, "   • %s %s (%s → %s)\n",
+				d.CategoryName, formatDelta(d.DeltaPercent),
+				formatMoney(d.PreviousTotal), formatMoney(d.CurrentTotal))
+		}
+		b.WriteString("\n")
+	}
+
+	// Anomalies
+	if len(report.Anomalies) > 0 {
+		fmt.Fprintf(&b, "🔍 Аномальные покупки (%d):\n", len(report.Anomalies))
+		for i, a := range report.Anomalies[:min(3, len(report.Anomalies))] {
+			fmt.Fprintf(&b, "   %d. %s — %s\n", i+1, a.Name, formatMoney(a.Total))
+			fmt.Fprintf(&b, "      (в %.1fx раз выше среднего)\n", a.Factor)
+		}
+		b.WriteString("\n")
+	}
+
+	// AI Insights
+	if len(report.Insights) > 0 {
+		b.WriteString("💡 Инсайты:\n")
+		for _, insight := range report.Insights {
+			fmt.Fprintf(&b, "   • %s\n", insight.Text)
+		}
+	}
+
+	return b.String()
+}
+
+func buildDetailedPromptKeyboard() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📊 Подробный анализ", string(callbackStatsDetailedYes)),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Закрыть", string(callbackStatsClose)),
+		),
+	)
+}
+
+func buildDetailedNavigationKeyboard() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ К сводке", string(callbackStatsBack)),
+			tgbotapi.NewInlineKeyboardButtonData("📅 Другой период", string(callbackStatsOtherPeriod)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("❌ Закрыть", string(callbackStatsClose)),
+		),
+	)
+}
+
+func buildNoDataKeyboard() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📅 Другой период", string(callbackStatsOtherPeriod)),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Закрыть", string(callbackStatsClose)),
+		),
+	)
+}
+
 func removeReplyKeyboard() tgbotapi.ReplyKeyboardRemove {
 	return tgbotapi.NewRemoveKeyboard(true)
 }
 
 // ==================== Format Helpers ====================
+
+func formatQuantity(v float64) string {
+	if v == float64(int64(v)) {
+		return strconv.FormatInt(int64(v), 10)
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
 
 func formatMoney(amount valueobject.MoneyAmount) string {
 	return fmt.Sprintf("%s BYN", amount.DecimalString())
@@ -151,4 +286,19 @@ func formatDelta(delta float64) string {
 
 func formatPercentage(p float64) string {
 	return fmt.Sprintf("%.1f%%", p)
+}
+
+func separateDeltas(deltas []entity.CategoryDelta) ([]entity.CategoryDelta, []entity.CategoryDelta) {
+	increases := make([]entity.CategoryDelta, 0)
+	decreases := make([]entity.CategoryDelta, 0)
+
+	for _, d := range deltas {
+		if d.DeltaPercent > 0 {
+			increases = append(increases, d)
+		} else if d.DeltaPercent < 0 {
+			decreases = append(decreases, d)
+		}
+	}
+
+	return increases, decreases
 }

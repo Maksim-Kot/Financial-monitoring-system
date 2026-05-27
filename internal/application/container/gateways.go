@@ -13,6 +13,7 @@ type GatewaysContainer struct {
 	PhotoParser        gateway.PhotoParserGateway
 	TextParser         gateway.TextParserGateway
 	CategoryClassifier gateway.CategoryClassifierGateway
+	InsightGenerator   gateway.InsightGeneratorGateway
 }
 
 type GatewaysContainerConfig struct {
@@ -32,5 +33,6 @@ func NewGatewaysContainer(cfg *GatewaysContainerConfig) *GatewaysContainer {
 		PhotoParser:        groqService,
 		TextParser:         groqService,
 		CategoryClassifier: groqService,
+		InsightGenerator:   groqService,
 	}
 }

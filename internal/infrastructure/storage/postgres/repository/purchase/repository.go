@@ -125,6 +125,8 @@ func (r *PurchaseRepository) GetByIDs(ctx context.Context, in repository.Purchas
 	err := db.NewSelect().
 		Model(&models).
 		Where("id IN (?)", bun.List(ids)).
+		Order("purchase_date DESC").
+		Order("created_at DESC").
 		Scan(ctx)
 	if err != nil {
 		return repository.PurchaseRepositoryGetByIDsOut{}, err

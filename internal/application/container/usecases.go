@@ -22,6 +22,8 @@ type UseCasesContainer struct {
 	ListOrganisations shared.UseCase[usecase.ListOrganisationsUseCaseRequest, usecase.ListOrganisationsUseCaseResponse]
 	SaveOrganisation  shared.UseCase[usecase.SaveOrganisationUseCaseRequest, usecase.SaveOrganisationUseCaseResponse]
 
+	GetAnalytics shared.UseCase[usecase.GetAnalyticsUseCaseRequest, usecase.GetAnalyticsUseCaseResponse]
+
 	CancelScenario shared.UseCase[usecase.CancelScenarioUseCaseRequest, usecase.CancelScenarioUseCaseResponse]
 }
 
@@ -100,6 +102,14 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		TxManager:              cfg.Repositories.TxManager,
 	})
 
+	getAnalyticsUseCase := usecase.NewGetAnalyticsUseCase(&usecase.GetAnalyticsUseCaseConfig{
+		Logger:           cfg.Logger,
+		AnalyticsRepo:    cfg.Repositories.Analytics,
+		Calculator:       cfg.Services.AnalyticsCalculator,
+		AnomalyDetector:  cfg.Services.AnomalyDetector,
+		InsightGenerator: cfg.Gateways.InsightGenerator,
+	})
+
 	cancelScenarioUseCase := usecase.NewCancelScenarioUseCase(&usecase.CancelScenarioUseCaseConfig{
 		Logger:          cfg.Logger,
 		StateRepository: cfg.Repositories.UserState,
@@ -117,6 +127,7 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		ListScenario:      listScenarioUseCase,
 		ListOrganisations: listOrganisationsUseCase,
 		SaveOrganisation:  saveOrganisationUseCase,
+		GetAnalytics:      getAnalyticsUseCase,
 		CancelScenario:    cancelScenarioUseCase,
 	}
 }

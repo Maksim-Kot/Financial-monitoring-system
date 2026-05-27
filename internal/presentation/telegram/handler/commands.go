@@ -21,6 +21,8 @@ func (h *Handler) handleCommand(ctx context.Context, userID, chatID int64, msg *
 		h.cmdManual(chatID, userID)
 	case "list":
 		h.cmdList(ctx, userID, chatID)
+	case "stats":
+		h.cmdStats(ctx, userID, chatID)
 	case "cancel":
 		h.cmdCancel(ctx, userID, chatID)
 	}
@@ -78,6 +80,17 @@ func (h *Handler) cmdList(ctx context.Context, userID, chatID int64) {
 		Offset:    0,
 		Total:     out.Total,
 	})
+}
+
+func (h *Handler) cmdStats(ctx context.Context, userID, chatID int64) {
+	msg := tgbotapi.NewMessage(chatID, "📊 Выберите период для аналитики:")
+	msg.ReplyMarkup = buildPeriodSelectionKeyboard()
+	sent, err := h.bot.Send(msg)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to send stats menu", "error", err)
+		return
+	}
+	h.state.SetAnalytics(userID, analyticsState{MessageID: sent.MessageID})
 }
 
 func (h *Handler) cmdCancel(ctx context.Context, userID, chatID int64) {
