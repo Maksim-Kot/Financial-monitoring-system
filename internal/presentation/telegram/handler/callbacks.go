@@ -17,6 +17,8 @@ const (
 	callbackListFinish callbackAction = "list_finish"
 	callbackSaveOrgYes callbackAction = "save_org_yes"
 	callbackSaveOrgNo  callbackAction = "save_org_no"
+	callbackAddMoreYes callbackAction = "add_more_yes"
+	callbackAddMoreNo  callbackAction = "add_more_no"
 )
 
 func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQuery) {
@@ -35,6 +37,8 @@ func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQ
 		h.handleListCallback(ctx, q, userID, chatID, messageID, action)
 	case callbackSaveOrgYes, callbackSaveOrgNo:
 		h.handleSaveOrgCallback(ctx, q, userID, chatID, messageID, action)
+	case callbackAddMoreYes, callbackAddMoreNo:
+		h.handleAddMoreCallback(ctx, q, userID, chatID, messageID, action)
 	default:
 		h.answerCallback(q.ID, "Неизвестная команда")
 	}
@@ -135,6 +139,37 @@ func (h *Handler) handleSaveOrgCallback(ctx context.Context, q *tgbotapi.Callbac
 
 	h.state.ClearSaveOrgData(userID)
 	h.finalizePurchase(ctx, userID, chatID)
+}
+
+func (h *Handler) handleAddMoreCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int, action callbackAction) {
+	data, exists := h.state.GetManualItemsData(userID)
+	if !exists || data.MessageID != messageID {
+		h.answerCallback(q.ID, "Сессия устарела")
+		return
+	}
+
+	if action == callbackAddMoreYes {
+		edit := tgbotapi.NewEditMessageText(chatID, messageID, "Введите следующую позицию в формате:\nнаименование; количество; цена за единицу")
+		edit.ReplyMarkup = nil
+		h.bot.Send(edit)
+
+		h.state.SetStep(userID, stepWaitManualItem)
+	} else {
+		h.state.ClearManualItemsData(userID)
+
+		_, err := h.useCases.ClassifyCategory.Execute(ctx, usecase.ClassifyCategoryUseCaseRequest{
+			UserID: userID,
+		})
+		if err != nil {
+			h.logger.ErrorContext(ctx, "failed to classify categories", "error", err)
+		}
+
+		edit := tgbotapi.NewEditMessageText(chatID, messageID, "Позиции добавлены! Теперь введите дату покупки в формате ДД.ММ.ГГГГ")
+		edit.ReplyMarkup = nil
+		h.bot.Send(edit)
+
+		h.state.SetStep(userID, stepWaitDate)
+	}
 }
 
 func (h *Handler) answerCallback(callbackID, text string) {

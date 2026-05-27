@@ -13,14 +13,16 @@ func (h *Handler) handleCommand(ctx context.Context, userID, chatID int64, msg *
 	switch msg.Command() {
 	case "start":
 		h.cmdStart(chatID)
-	case "cancel":
-		h.cmdCancel(ctx, userID, chatID)
-	case "list":
-		h.cmdList(ctx, userID, chatID)
 	case "text":
 		h.cmdText(chatID, userID)
 	case "photo":
 		h.cmdPhoto(chatID, userID)
+	case "manual":
+		h.cmdManual(chatID, userID)
+	case "list":
+		h.cmdList(ctx, userID, chatID)
+	case "cancel":
+		h.cmdCancel(ctx, userID, chatID)
 	}
 }
 
@@ -38,28 +40,10 @@ func (h *Handler) cmdPhoto(chatID, userID int64) {
 	h.sendMessage(chatID, "Отправьте фото с чеком")
 }
 
-func (h *Handler) cmdCancel(ctx context.Context, userID, chatID int64) {
-	_, err := h.useCases.CancelScenario.Execute(ctx, usecase.CancelScenarioUseCaseRequest{
-		UserID: userID,
-	})
-	if err != nil {
-		if domainError.IsDomain(err) {
-			switch domainError.Extract(err).Status {
-			case domainError.StatusConflict:
-				if h.state.GetStep(userID) == stepIdle {
-					h.sendMessageWithRemoveKeyboard(chatID, "Нет активных операций для отмены")
-					return
-				}
-			default:
-				h.logger.ErrorContext(ctx, "failed to cancel scenario", "error", err)
-				h.sendMessage(chatID, "Произошла ошибка. Попробуйте позже")
-				return
-			}
-		}
-	}
-
-	h.state.ClearStep(userID)
-	h.sendMessageWithRemoveKeyboard(chatID, "Операция отменена")
+func (h *Handler) cmdManual(chatID, userID int64) {
+	h.state.SetStep(userID, stepWaitManualItem)
+	h.state.ClearManualItemsData(userID)
+	h.sendMessage(chatID, "Введите позицию в формате:\nнаименование; количество; цена за единицу\n\nНапример: Молоко; 2; 1.50")
 }
 
 func (h *Handler) cmdList(ctx context.Context, userID, chatID int64) {
@@ -94,4 +78,28 @@ func (h *Handler) cmdList(ctx context.Context, userID, chatID int64) {
 		Offset:    0,
 		Total:     out.Total,
 	})
+}
+
+func (h *Handler) cmdCancel(ctx context.Context, userID, chatID int64) {
+	_, err := h.useCases.CancelScenario.Execute(ctx, usecase.CancelScenarioUseCaseRequest{
+		UserID: userID,
+	})
+	if err != nil {
+		if domainError.IsDomain(err) {
+			switch domainError.Extract(err).Status {
+			case domainError.StatusConflict:
+				if h.state.GetStep(userID) == stepIdle {
+					h.sendMessageWithRemoveKeyboard(chatID, "Нет активных операций для отмены")
+					return
+				}
+			default:
+				h.logger.ErrorContext(ctx, "failed to cancel scenario", "error", err)
+				h.sendMessage(chatID, "Произошла ошибка. Попробуйте позже")
+				return
+			}
+		}
+	}
+
+	h.state.ClearStep(userID)
+	h.sendMessageWithRemoveKeyboard(chatID, "Операция отменена")
 }

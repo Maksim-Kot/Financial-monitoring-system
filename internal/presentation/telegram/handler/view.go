@@ -120,6 +120,15 @@ func buildSaveOrgKeyboard() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+func buildAddMoreKeyboard() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Да", string(callbackAddMoreYes)),
+			tgbotapi.NewInlineKeyboardButtonData("Нет", string(callbackAddMoreNo)),
+		),
+	)
+}
+
 func removeReplyKeyboard() tgbotapi.ReplyKeyboardRemove {
 	return tgbotapi.NewRemoveKeyboard(true)
 }

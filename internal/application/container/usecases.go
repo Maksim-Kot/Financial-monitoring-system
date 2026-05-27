@@ -12,6 +12,7 @@ type UseCasesContainer struct {
 
 	TextScenario     shared.UseCase[usecase.TextScenarioUseCaseRequest, usecase.TextScenarioUseCaseResponse]
 	PhotoScenario    shared.UseCase[usecase.PhotoScenarioUseCaseRequest, usecase.PhotoScenarioUseCaseResponse]
+	ManualAddItem    shared.UseCase[usecase.ManualAddItemUseCaseRequest, usecase.ManualAddItemUseCaseResponse]
 	ClassifyCategory shared.UseCase[usecase.ClassifyCategoryUseCaseRequest, usecase.ClassifyCategoryUseCaseResponse]
 	AddPurchaseDate  shared.UseCase[usecase.AddPurchaseDateUseCaseRequest, usecase.AddPurchaseDateUseCaseResponse]
 	AddOrganisation  shared.UseCase[usecase.AddOrganisationUseCaseRequest, usecase.AddOrganisationUseCaseResponse]
@@ -50,6 +51,11 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		StateRepository:    cfg.Repositories.UserState,
 		PhotoParserGateway: cfg.Gateways.PhotoParser,
 		ImagePreprocessor:  cfg.Services.ImagePreprocessor,
+	})
+
+	manualAddItemUseCase := usecase.NewManualAddItemUseCase(&usecase.ManualAddItemUseCaseConfig{
+		Logger:          cfg.Logger,
+		StateRepository: cfg.Repositories.UserState,
 	})
 
 	classifyCategoryUseCase := usecase.NewClassifyCategoryUseCase(&usecase.ClassifyCategoryUseCaseConfig{
@@ -103,6 +109,7 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		EnsureCategories:  ensureCategoriesUseCase,
 		TextScenario:      textScenarioUseCase,
 		PhotoScenario:     photoScenarioUseCase,
+		ManualAddItem:     manualAddItemUseCase,
 		ClassifyCategory:  classifyCategoryUseCase,
 		AddPurchaseDate:   addPurchaseDateUseCase,
 		AddOrganisation:   addOrganisationUseCase,

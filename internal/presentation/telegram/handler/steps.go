@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"fms-project/internal/application/usecase"
@@ -20,6 +21,8 @@ func (h *Handler) handleStep(ctx context.Context, userID, chatID int64, msg *tgb
 			return
 		}
 		h.stepPhoto(ctx, userID, chatID, msg.Photo)
+	case stepWaitManualItem:
+		h.stepManualItem(ctx, userID, chatID, msg.Text)
 	case stepWaitDate:
 		h.stepDate(ctx, userID, chatID, msg.Text)
 	case stepWaitOrganisation:
@@ -92,6 +95,45 @@ func (h *Handler) stepPhoto(ctx context.Context, userID, chatID int64, photos []
 	confirmMsg := "Фото обработано! Теперь введите дату покупки в формате ДД.ММ.ГГГГ"
 	edit := tgbotapi.NewEditMessageText(chatID, msg.MessageID, confirmMsg)
 	h.bot.Send(edit)
+}
+
+func (h *Handler) stepManualItem(ctx context.Context, userID, chatID int64, text string) {
+	if strings.TrimSpace(text) == "" {
+		h.sendMessage(chatID, "Ввод не может быть пустым. Попробуйте еще раз или используйте /cancel")
+		return
+	}
+
+	out, err := h.useCases.ManualAddItem.Execute(ctx, usecase.ManualAddItemUseCaseRequest{
+		UserID: userID,
+		Item:   text,
+	})
+	if err != nil {
+		if domainError.HasStatus(err, domainError.StatusValidation) {
+			h.sendMessage(chatID, "Неверный формат. Введите позицию в формате:\nнаименование; количество; цена за единицу\n\nНапример: Молоко; 2; 1.50")
+			return
+		}
+		h.logger.ErrorContext(ctx, "failed to add manual item", "error", err)
+		h.sendMessage(chatID, "Произошла ошибка. Попробуйте еще раз или используйте /cancel")
+		return
+	}
+
+	total := out.Item.UnitPrice * out.Item.Quantity
+	msg := fmt.Sprintf("Добавлена позиция к покупке:\n%s — %.2f шт. × %.2f = %.2f BYN\n\nДобавить еще позицию?", out.Item.Name, out.Item.Quantity, out.Item.UnitPrice, total)
+
+	msgCfg := tgbotapi.NewMessage(chatID, msg)
+	msgCfg.ReplyMarkup = buildAddMoreKeyboard()
+
+	sentMsg, err := h.bot.Send(msgCfg)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to send add more message", "error", err)
+		h.sendMessage(chatID, "Произошла ошибка. Используйте /cancel для отмены")
+		return
+	}
+
+	h.state.SetStep(userID, stepWaitAddMoreItem)
+	h.state.SetManualItemsData(userID, manualItemsData{
+		MessageID: sentMsg.MessageID,
+	})
 }
 
 func (h *Handler) stepDate(ctx context.Context, userID, chatID int64, text string) {
@@ -167,8 +209,6 @@ func (h *Handler) stepOrganisation(ctx context.Context, userID, chatID int64, te
 		return
 	}
 
-	h.sendMessageWithRemoveKeyboard(chatID, "Организация \""+orgName+"\" не сохранена в вашем списке.")
-
 	msg := tgbotapi.NewMessage(chatID, "Сохранить организацию \""+orgName+"\" для быстрого выбора в будущем?")
 	msg.ReplyMarkup = buildSaveOrgKeyboard()
 
@@ -196,5 +236,6 @@ func (h *Handler) finalizePurchase(ctx context.Context, userID, chatID int64) {
 	}
 
 	h.state.ClearStep(userID)
+	h.state.ClearManualItemsData(userID)
 	h.sendMessageWithRemoveKeyboard(chatID, "Покупка успешно сохранена!")
 }

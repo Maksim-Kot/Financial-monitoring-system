@@ -13,6 +13,8 @@ const (
 	stepWaitDate         userStep = "wait_date"
 	stepWaitOrganisation userStep = "wait_org"
 	stepWaitSaveOrg      userStep = "wait_save_org"
+	stepWaitManualItem   userStep = "wait_manual_item"
+	stepWaitAddMoreItem  userStep = "wait_add_more_item"
 )
 
 type listPaginationState struct {
@@ -26,10 +28,15 @@ type saveOrgData struct {
 	Name      string
 }
 
+type manualItemsData struct {
+	MessageID int
+}
+
 type State struct {
-	userSteps     map[int64]userStep
-	listStates    map[int64]listPaginationState
-	saveOrgStates map[int64]saveOrgData
+	userSteps         map[int64]userStep
+	listStates        map[int64]listPaginationState
+	saveOrgStates     map[int64]saveOrgData
+	manualItemsStates map[int64]manualItemsData
 
 	stepsMu       sync.RWMutex
 	listMu        sync.RWMutex
@@ -40,9 +47,10 @@ type State struct {
 
 func NewState() *State {
 	return &State{
-		userSteps:     make(map[int64]userStep),
-		listStates:    make(map[int64]listPaginationState),
-		saveOrgStates: make(map[int64]saveOrgData),
+		userSteps:         make(map[int64]userStep),
+		listStates:        make(map[int64]listPaginationState),
+		saveOrgStates:     make(map[int64]saveOrgData),
+		manualItemsStates: make(map[int64]manualItemsData),
 	}
 }
 
@@ -113,4 +121,26 @@ func (s *State) ClearSaveOrgData(userID int64) {
 	s.saveOrgMu.Lock()
 	defer s.saveOrgMu.Unlock()
 	delete(s.saveOrgStates, userID)
+}
+
+// Manual Items Data
+
+func (s *State) GetManualItemsData(userID int64) (manualItemsData, bool) {
+	s.manualItemsMu.RLock()
+	defer s.manualItemsMu.RUnlock()
+
+	data, ok := s.manualItemsStates[userID]
+	return data, ok
+}
+
+func (s *State) SetManualItemsData(userID int64, data manualItemsData) {
+	s.manualItemsMu.Lock()
+	defer s.manualItemsMu.Unlock()
+	s.manualItemsStates[userID] = data
+}
+
+func (s *State) ClearManualItemsData(userID int64) {
+	s.manualItemsMu.Lock()
+	defer s.manualItemsMu.Unlock()
+	delete(s.manualItemsStates, userID)
 }
