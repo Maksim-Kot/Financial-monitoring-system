@@ -9,6 +9,7 @@ import (
 	"fms-project/internal/infrastructure/logger"
 	inmemory "fms-project/internal/infrastructure/storage/in-memory"
 	"fms-project/internal/infrastructure/storage/postgres"
+	"fms-project/internal/infrastructure/storage/postgres/repository/analytics"
 	"fms-project/internal/infrastructure/storage/postgres/repository/category"
 	"fms-project/internal/infrastructure/storage/postgres/repository/organisation"
 	"fms-project/internal/infrastructure/storage/postgres/repository/purchase"
@@ -19,6 +20,7 @@ type RepositoriesContainer struct {
 	Purchases     repository.PurchaseRepository
 	Organisations repository.OrganisationRepository
 	UserState     repository.UserStateRepository
+	Analytics     repository.AnalyticsRepository
 	TxManager     transaction.TxManager
 }
 
@@ -48,11 +50,17 @@ func NewRepositoriesContainer(ctx context.Context, cfg *RepositoriesContainerCon
 
 	userStateRepository := inmemory.NewUserStateRepository()
 
+	analyticsRepository := analytics.NewAnalyticsRepository(&analytics.AnalyticsRepositoryConfig{
+		Logger: cfg.Logger,
+		Client: cfg.Postgres,
+	})
+
 	return &RepositoriesContainer{
 		Categories:    categoryRepository,
 		Purchases:     purchaseRepository,
 		Organisations: organisationRepository,
 		UserState:     userStateRepository,
+		Analytics:     analyticsRepository,
 		TxManager:     txManager,
 	}
 }
