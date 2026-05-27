@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -334,7 +335,7 @@ func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in reposito
 	db := postgres.CheckTx(ctx, r.client)
 
 	type result struct {
-		AvgMinor float64 `bun:"avg_minor"`
+		AvgMinor sql.NullFloat64 `bun:"avg_minor"`
 	}
 
 	var res result
@@ -380,12 +381,15 @@ func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in reposito
 	}
 
 	// Handle NaN/NULL when no data
-	if res.AvgMinor != res.AvgMinor {
-		res.AvgMinor = 0
+	var avgMinor int64
+	if res.AvgMinor.Valid {
+		avgMinor = int64(res.AvgMinor.Float64)
+	} else {
+		avgMinor = 0
 	}
 
 	avg, err := valueobject.NewMoneyAmountFromInt64(
-		int64(res.AvgMinor),
+		avgMinor,
 		moneyDecimals,
 		valueobject.MoneyAmountCurrencyBYN,
 		nil,
