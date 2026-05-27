@@ -30,6 +30,9 @@ var promptTextParser string
 //go:embed prompts/photo-parser-system-prompt.txt
 var promptPhotoParser string
 
+//go:embed prompts/category-classifier-system-prompt.txt
+var promptCategoryClassifier string
+
 type GroqServiceConfig struct {
 	Logger  logger.Logger
 	BaseURL string
@@ -118,6 +121,58 @@ func (g *GroqService) ParsePhoto(ctx context.Context, in gateway.PhotoParserGate
 	return gateway.PhotoParserGatewayOut{Expenses: items}, nil
 }
 
+func (g *GroqService) ClassifyCategories(ctx context.Context, in gateway.CategoryClassifierGatewayIn) (gateway.CategoryClassifierGatewayOut, error) {
+	if len(in.Items) == 0 {
+		return gateway.CategoryClassifierGatewayOut{Items: []entity.DraftItem{}}, nil
+	}
+
+	if len(in.Categories) == 0 {
+		return gateway.CategoryClassifierGatewayOut{Items: in.Items}, nil
+	}
+
+	// build category map
+	categories := make(map[string]entity.Category, len(in.Categories))
+	for _, c := range in.Categories {
+		categories[c.Name] = c
+	}
+
+	prompt := buildClassifyPrompt(in.Items, in.Categories)
+
+	req := chatCompletionRequest{
+		Model: textModel,
+		Messages: []chatRequestMessage{
+			{
+				Role:    "system",
+				Content: strings.TrimSpace(promptCategoryClassifier),
+			},
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+	}
+
+	classified, err := g.classifyCompletion(ctx, req)
+	if err != nil {
+		return gateway.CategoryClassifierGatewayOut{}, err
+	}
+
+	for i := range in.Items {
+		item := &in.Items[i]
+
+		for _, c := range classified {
+			if strings.EqualFold(c.Name, item.Name) || c.ID == i+1 {
+				if category, ok := categories[c.Category]; ok {
+					item.Category = category
+				}
+				break
+			}
+		}
+	}
+
+	return gateway.CategoryClassifierGatewayOut{Items: in.Items}, nil
+}
+
 func (g *GroqService) parseCompletion(ctx context.Context, payload chatCompletionRequest) ([]entity.DraftItem, error) {
 	var resp chatResponse
 	if err := g.httpClient.PostJSON(ctx, chatCompletionsPath, payload, &resp); err != nil {
@@ -165,6 +220,57 @@ func extractItemsFromContent(content string) ([]entity.DraftItem, error) {
 	}
 
 	return nil, errors.New("failed to decode item array from groq content")
+}
+
+func buildClassifyPrompt(items []entity.DraftItem, categories []entity.Category) string {
+	lines := make([]string, len(items))
+	for i, item := range items {
+		lines[i] = fmt.Sprintf("%d. %s", i+1, item.Name)
+	}
+
+	categoryNames := make([]string, len(categories))
+	for i, c := range categories {
+		categoryNames[i] = c.Name
+	}
+
+	return fmt.Sprintf("Products: %s\nCategories: %s", strings.Join(lines, "; "), strings.Join(categoryNames, ", "))
+
+}
+
+func (g *GroqService) classifyCompletion(ctx context.Context, payload chatCompletionRequest) ([]classifiedItem, error) {
+	var resp chatResponse
+	if err := g.httpClient.PostJSON(ctx, chatCompletionsPath, payload, &resp); err != nil {
+		return nil, err
+	}
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("groq response contains no choices")
+	}
+
+	g.logger.Debug("groq classify response", "response", resp.Choices[0].Message.Content)
+	items, err := extractClassificationFromContent(resp.Choices[0].Message.Content)
+	if err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func extractClassificationFromContent(content string) ([]classifiedItem, error) {
+	matches := arrayPattern.FindAllString(content, -1)
+	if len(matches) == 0 {
+		return nil, errors.New("groq content does not contain JSON array")
+	}
+
+	for _, rawArray := range matches {
+		var parsed []classifiedItem
+		if err := json.Unmarshal([]byte(rawArray), &parsed); err != nil {
+			continue
+		}
+
+		return parsed, nil
+	}
+
+	return nil, errors.New("failed to decode classification from groq content")
 }
 
 var arrayPattern = regexp.MustCompile(`(?s)\[[\s\S]*?\]`)

@@ -10,6 +10,7 @@ import (
 
 type ServicesContainer struct {
 	ImagePreprocessor *service.ImagePreprocessorService
+	CategoryMatcher   *service.CategoryMatcherService
 }
 
 type ServicesContainerConfig struct {
@@ -21,8 +22,10 @@ type ServicesContainerConfig struct {
 
 func NewServicesContainer(ctx context.Context, cfg *ServicesContainerConfig) *ServicesContainer {
 	imagePreprocessorService := service.NewImagePreprocessorService(&service.ImagePreprocessorServiceConfig{})
+	categoryMatcherService := service.NewCategoryMatcherService(&service.CategoryMatcherServiceConfig{})
 
 	return &ServicesContainer{
 		ImagePreprocessor: imagePreprocessorService,
+		CategoryMatcher:   categoryMatcherService,
 	}
 }

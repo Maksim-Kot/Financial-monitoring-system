@@ -10,8 +10,9 @@ import (
 )
 
 type GatewaysContainer struct {
-	PhotoParser gateway.PhotoParserGateway
-	TextParser  gateway.TextParserGateway
+	PhotoParser        gateway.PhotoParserGateway
+	TextParser         gateway.TextParserGateway
+	CategoryClassifier gateway.CategoryClassifierGateway
 }
 
 type GatewaysContainerConfig struct {
@@ -28,7 +29,8 @@ func NewGatewaysContainer(cfg *GatewaysContainerConfig) *GatewaysContainer {
 	})
 
 	return &GatewaysContainer{
-		PhotoParser: groqService,
-		TextParser:  groqService,
+		PhotoParser:        groqService,
+		TextParser:         groqService,
+		CategoryClassifier: groqService,
 	}
 }
