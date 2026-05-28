@@ -178,7 +178,7 @@ func buildDetailedMessage(report entity.DetailedReport) string {
 	fmt.Fprintf(&b, "📊 Детальный анализ: %s\n\n", report.Summary.Period.Format())
 
 	// Comparison section
-	fmt.Fprintf(&b, "📈 Сравнение с %s:\n", report.Comparison.PreviousPeriod.Format())
+	fmt.Fprintf(&b, "📅 Сравнение с %s:\n", report.Comparison.PreviousPeriod.Format())
 	fmt.Fprintf(&b, "   Текущий: %s\n", formatMoney(report.Comparison.CurrentTotal))
 	fmt.Fprintf(&b, "   Предыдущий: %s\n", formatMoney(report.Comparison.PreviousTotal))
 	fmt.Fprintf(&b, "   Изменение: %s\n\n", formatDelta(report.Comparison.DeltaPercent))
@@ -187,7 +187,7 @@ func buildDetailedMessage(report entity.DetailedReport) string {
 	increases, decreases := separateDeltas(report.CategoryDeltas)
 
 	if len(increases) > 0 {
-		b.WriteString("📊 Что выросло:\n")
+		b.WriteString("📈 Что выросло:\n")
 		for _, d := range increases[:min(3, len(increases))] {
 			fmt.Fprintf(&b, "   • %s %s (%s → %s)\n",
 				d.CategoryName, formatDelta(d.DeltaPercent),
@@ -276,10 +276,10 @@ func formatMoney(amount valueobject.MoneyAmount) string {
 
 func formatDelta(delta float64) string {
 	if delta > 0 {
-		return fmt.Sprintf("📈 +%.1f%%", delta)
+		return fmt.Sprintf("+%.1f%%", delta)
 	}
 	if delta < 0 {
-		return fmt.Sprintf("📉 %.1f%%", delta)
+		return fmt.Sprintf("%.1f%%", delta)
 	}
 	return "➡️ 0%"
 }
