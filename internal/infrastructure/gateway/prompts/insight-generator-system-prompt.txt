@@ -21,12 +21,22 @@ RULES:
 - Generate 2-4 short insights (max 120 characters each)
 - Focus on: significant changes, unusual patterns, notable shifts
 - Use natural, conversational Russian language
-- Do NOT repeat exact numbers (use "значительно", "существенно", "заметно", "намного")
+- Do NOT repeat exact numbers from input JSON
 - Do NOT give financial advice or recommendations
 - Do NOT use generic tips like "экономьте больше" or "следите за расходами"
 - Do NOT mention minor technical details (currency codes, periods in dates)
 - Insights should be observation-based, not prescriptive
 - Write insights only in russian, without specific symbols
+
+SEVERITY CALIBRATION (VERY IMPORTANT):
+- Base wording strength on absolute delta_percent values from input.
+- Use this mapping consistently:
+  - abs(delta) < 10: "незначительно", "слегка", "умеренно"; NEVER "значительно", "существенно", "намного", "резко".
+  - 10 <= abs(delta) < 25: "заметно", "умеренно".
+  - abs(delta) >= 25: "значительно", "существенно", "резко".
+- Apply the same calibration to category_changes delta_percent.
+- If overall delta is small (<10), avoid strong wording about total expenses.
+- If only one metric is strong (>=25), mention strong change only for that metric, not for everything.
 
 FOCUS AREAS (in priority order):
 1. Large spending changes vs previous period

@@ -18,6 +18,12 @@ import (
 
 const moneyDecimals uint8 = 2
 
+func periodDateBounds(p valueobject.Period) (time.Time, time.Time) {
+	startDate := time.Date(p.Start.Year(), p.Start.Month(), p.Start.Day(), 0, 0, 0, 0, time.UTC)
+	exclusiveEndDate := time.Date(p.End.Year(), p.End.Month(), p.End.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
+	return startDate, exclusiveEndDate
+}
+
 type AnalyticsRepositoryConfig struct {
 	Logger logger.Logger
 	Client *postgres.Client
@@ -38,6 +44,7 @@ func NewAnalyticsRepository(cfg *AnalyticsRepositoryConfig) repository.Analytics
 // GetTotal returns total expenses and counts for the period
 func (r *AnalyticsRepository) GetTotal(ctx context.Context, in repository.AnalyticsRepositoryGetSummaryIn) (repository.AnalyticsRepositoryGetSummaryOut, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	// Query: total sum, purchase count, expense count
 	type result struct {
@@ -54,8 +61,8 @@ func (r *AnalyticsRepository) GetTotal(ctx context.Context, in repository.Analyt
 		ColumnExpr("COUNT(e.id) as expense_count").
 		Join("JOIN purchases p ON p.id = e.purchase_id").
 		Where("p.user_id = ?", in.UserID).
-		Where("p.purchase_date >= ?", in.Period.Start).
-		Where("p.purchase_date <= ?", in.Period.End).
+		Where("p.purchase_date >= ?::date", startDate).
+		Where("p.purchase_date < ?::date", exclusiveEndDate).
 		Scan(ctx, &res)
 
 	if err != nil {
@@ -82,6 +89,7 @@ func (r *AnalyticsRepository) GetTotal(ctx context.Context, in repository.Analyt
 // GetTopCategories returns top N categories by total amount
 func (r *AnalyticsRepository) GetTopCategories(ctx context.Context, in repository.AnalyticsRepositoryGetCategoryTotalsIn) ([]entity.CategoryStat, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	type result struct {
 		CategoryID   uuid.UUID `bun:"category_id"`
@@ -102,8 +110,8 @@ func (r *AnalyticsRepository) GetTopCategories(ctx context.Context, in repositor
 		Join("JOIN purchases p ON p.id = e.purchase_id").
 		Join("JOIN categories c ON c.id = e.category_id").
 		Where("p.user_id = ?", in.UserID).
-		Where("p.purchase_date >= ?", in.Period.Start).
-		Where("p.purchase_date <= ?", in.Period.End).
+		Where("p.purchase_date >= ?::date", startDate).
+		Where("p.purchase_date < ?::date", exclusiveEndDate).
 		GroupExpr("e.category_id, c.name, c.icon").
 		OrderExpr("total_minor DESC").
 		Limit(in.Limit).
@@ -145,6 +153,7 @@ func (r *AnalyticsRepository) GetTopCategories(ctx context.Context, in repositor
 // GetTopPurchases returns top N most expensive purchases
 func (r *AnalyticsRepository) GetTopPurchases(ctx context.Context, in repository.AnalyticsRepositoryGetPurchasesIn) ([]entity.PurchaseStat, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	type result struct {
 		PurchaseID       uuid.UUID `bun:"purchase_id"`
@@ -164,8 +173,8 @@ func (r *AnalyticsRepository) GetTopPurchases(ctx context.Context, in repository
 		ColumnExpr("COUNT(e.id) as item_count").
 		Join("JOIN purchases p ON p.id = e.purchase_id").
 		Where("p.user_id = ?", in.UserID).
-		Where("p.purchase_date >= ?", in.Period.Start).
-		Where("p.purchase_date <= ?", in.Period.End).
+		Where("p.purchase_date >= ?::date", startDate).
+		Where("p.purchase_date < ?::date", exclusiveEndDate).
 		GroupExpr("e.purchase_id, p.purchase_date, p.organisation_name").
 		OrderExpr("total_minor DESC").
 		Limit(in.Limit).
@@ -207,6 +216,7 @@ func (r *AnalyticsRepository) GetTopPurchases(ctx context.Context, in repository
 // GetCategoryTotals returns all category totals for the period
 func (r *AnalyticsRepository) GetCategoryTotals(ctx context.Context, in repository.AnalyticsRepositoryGetCategoryTotalsIn) (repository.AnalyticsRepositoryGetCategoryTotalsOut, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	type result struct {
 		CategoryID   uuid.UUID `bun:"category_id"`
@@ -227,8 +237,8 @@ func (r *AnalyticsRepository) GetCategoryTotals(ctx context.Context, in reposito
 		Join("JOIN purchases p ON p.id = e.purchase_id").
 		Join("JOIN categories c ON c.id = e.category_id").
 		Where("p.user_id = ?", in.UserID).
-		Where("p.purchase_date >= ?", in.Period.Start).
-		Where("p.purchase_date <= ?", in.Period.End).
+		Where("p.purchase_date >= ?::date", startDate).
+		Where("p.purchase_date < ?::date", exclusiveEndDate).
 		GroupExpr("e.category_id, c.name, c.icon").
 		OrderExpr("total_minor DESC").
 		Scan(ctx, &results)
@@ -270,6 +280,7 @@ func (r *AnalyticsRepository) GetCategoryTotals(ctx context.Context, in reposito
 // Used for anomaly detection
 func (r *AnalyticsRepository) GetPurchases(ctx context.Context, in repository.AnalyticsRepositoryGetPurchasesIn) (repository.AnalyticsRepositoryGetPurchasesOut, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	type result struct {
 		PurchaseID       uuid.UUID `bun:"purchase_id"`
@@ -289,8 +300,8 @@ func (r *AnalyticsRepository) GetPurchases(ctx context.Context, in repository.An
 		ColumnExpr("COUNT(e.id) as item_count").
 		Join("JOIN purchases p ON p.id = e.purchase_id").
 		Where("p.user_id = ?", in.UserID).
-		Where("p.purchase_date >= ?", in.Period.Start).
-		Where("p.purchase_date <= ?", in.Period.End).
+		Where("p.purchase_date >= ?::date", startDate).
+		Where("p.purchase_date < ?::date", exclusiveEndDate).
 		GroupExpr("e.purchase_id, p.purchase_date, p.organisation_name").
 		OrderExpr("p.purchase_date DESC").
 		Scan(ctx, &results)
@@ -333,6 +344,7 @@ func (r *AnalyticsRepository) GetPurchases(ctx context.Context, in repository.An
 // If CategoryID is set, calculates average for purchases containing that category
 func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in repository.AnalyticsRepositoryGetAverageExpenseIn) (repository.AnalyticsRepositoryGetAverageExpenseOut, error) {
 	db := postgres.CheckTx(ctx, r.client)
+	startDate, exclusiveEndDate := periodDateBounds(in.Period)
 
 	type result struct {
 		AvgMinor sql.NullFloat64 `bun:"avg_minor"`
@@ -350,11 +362,11 @@ func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in reposito
 				FROM expenses e
 				JOIN purchases p ON p.id = e.purchase_id
 				WHERE p.user_id = ?
-				  AND p.purchase_date >= ?
-				  AND p.purchase_date <= ?
+				  AND p.purchase_date >= ?::date
+				  AND p.purchase_date < ?::date
 				GROUP BY e.purchase_id
 			) as purchase_totals`
-		err = db.QueryRowContext(ctx, query, in.UserID, in.Period.Start, in.Period.End).Scan(&res.AvgMinor)
+		err = db.QueryRowContext(ctx, query, in.UserID, startDate, exclusiveEndDate).Scan(&res.AvgMinor)
 	} else {
 		// Category-specific average using raw query
 		query := `
@@ -364,8 +376,8 @@ func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in reposito
 				FROM expenses e
 				JOIN purchases p ON p.id = e.purchase_id
 				WHERE p.user_id = ?
-				  AND p.purchase_date >= ?
-				  AND p.purchase_date <= ?
+				  AND p.purchase_date >= ?::date
+				  AND p.purchase_date < ?::date
 				  AND EXISTS (
 					  SELECT 1 FROM expenses e2
 					  WHERE e2.purchase_id = e.purchase_id
@@ -373,7 +385,7 @@ func (r *AnalyticsRepository) GetAverageExpense(ctx context.Context, in reposito
 				  )
 				GROUP BY e.purchase_id
 			) as purchase_totals`
-		err = db.QueryRowContext(ctx, query, in.UserID, in.Period.Start, in.Period.End, in.CategoryID.Value()).Scan(&res.AvgMinor)
+		err = db.QueryRowContext(ctx, query, in.UserID, startDate, exclusiveEndDate, in.CategoryID.Value()).Scan(&res.AvgMinor)
 	}
 
 	if err != nil {
