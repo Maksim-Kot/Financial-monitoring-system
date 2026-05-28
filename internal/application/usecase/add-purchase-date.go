@@ -85,7 +85,7 @@ func parsePurchaseDate(raw string) (time.Time, error) {
 	}
 
 	for _, layout := range layouts {
-		t, err := time.ParseInLocation(layout, text, time.Local)
+		t, err := time.Parse(layout, text)
 		if err == nil {
 			return t, nil
 		}
