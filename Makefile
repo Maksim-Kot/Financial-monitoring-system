@@ -15,3 +15,6 @@ infra/remove:
 
 lint:
 	@golangci-lint run ./...
+
+vulncheck:
+	@govulncheck ./...
