@@ -1,7 +1,10 @@
 package service
 
 import (
+	"cmp"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"fms-project/internal/domain/entity"
 )
@@ -9,7 +12,12 @@ import (
 type CategoryMatcherServiceConfig struct{}
 
 type CategoryMatcherService struct {
-	dictionary map[string]categoryEntry
+	dictionary []dictionaryEntry
+}
+
+type dictionaryEntry struct {
+	keyword string
+	entry   categoryEntry
 }
 
 type categoryEntry struct {
@@ -43,11 +51,11 @@ func (s *CategoryMatcherService) Match(items []entity.DraftItem, categories []en
 		bestCategory := ""
 		bestScore := 0
 
-		for keyword, entry := range s.dictionary {
-			score := calculateScore(nameLower, nameNormalized, keyword, entry.weight)
+		for _, dictEntry := range s.dictionary {
+			score := calculateScore(nameLower, nameNormalized, dictEntry.keyword, dictEntry.entry.weight)
 			if score > bestScore {
 				bestScore = score
-				bestCategory = entry.name
+				bestCategory = dictEntry.entry.name
 			}
 		}
 
@@ -94,8 +102,8 @@ func normalizeName(s string) string {
 	return result.String()
 }
 
-func buildDictionary() map[string]categoryEntry {
-	return map[string]categoryEntry{
+func buildDictionary() []dictionaryEntry {
+	raw := map[string]categoryEntry{
 		"хлеб":             {name: "Продукты", weight: 10},
 		"батон":            {name: "Продукты", weight: 10},
 		"булк":             {name: "Продукты", weight: 10},
@@ -300,4 +308,15 @@ func buildDictionary() map[string]categoryEntry {
 		"пицц":             {name: "Развлечения", weight: 10},
 		"суши":             {name: "Развлечения", weight: 10},
 	}
+
+	entries := make([]dictionaryEntry, 0, len(raw))
+	for keyword, entry := range raw {
+		entries = append(entries, dictionaryEntry{keyword: keyword, entry: entry})
+	}
+
+	slices.SortFunc(entries, func(a, b dictionaryEntry) int {
+		return cmp.Compare(utf8.RuneCountInString(b.keyword), utf8.RuneCountInString(a.keyword))
+	})
+
+	return entries
 }
