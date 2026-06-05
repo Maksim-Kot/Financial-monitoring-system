@@ -13,6 +13,8 @@ import (
 const (
 	purchasesPerPage      = 3
 	maxSavedOrganisations = 10
+	editPurchasesPerPage  = 1 // Show 1 purchase at a time for editing
+	editJumpStep          = 5 // Jump 5 positions forward/backward
 )
 
 type HandlerConfig struct {
@@ -27,11 +29,12 @@ type Handler struct {
 	useCases   *container.UseCasesContainer
 	httpClient *adapter.HttpClient
 
-	state *State
+	state            *State
+	callbackHandlers map[callbackAction]callbackHandler
 }
 
 func NewHandler(cfg *HandlerConfig) *Handler {
-	return &Handler{
+	h := &Handler{
 		logger:   cfg.Logger.With("layer", "presentation", "component", "Handler"),
 		bot:      cfg.Bot,
 		useCases: cfg.UseCases,
@@ -40,6 +43,8 @@ func NewHandler(cfg *HandlerConfig) *Handler {
 			WithRetries(2),
 		state: NewState(),
 	}
+	h.callbackHandlers = h.buildCallbackHandlers()
+	return h
 }
 
 func (h *Handler) Handle(ctx context.Context, update tgbotapi.Update) {

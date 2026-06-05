@@ -47,9 +47,45 @@ type PurchaseRepositoryDeleteIn struct {
 
 type PurchaseRepositoryDeleteOut struct{}
 
+type YearWithMonths struct {
+	Year   int
+	Months []int
+}
+
+type PurchaseRepositoryGetAvailablePeriodsIn struct {
+	UserID int64
+}
+
+type PurchaseRepositoryGetAvailablePeriodsOut struct {
+	Periods []YearWithMonths
+}
+
+func (o *PurchaseRepositoryGetAvailablePeriodsOut) Exists() bool {
+	return len(o.Periods) > 0
+}
+
+type PurchaseRepositoryGetByUserIDAndPeriodIn struct {
+	UserID int64
+	Year   int
+	Month  int
+	Limit  int
+	Offset int
+}
+
+type PurchaseRepositoryGetByUserIDAndPeriodOut struct {
+	Purchases []entity.Purchase
+	Total     int
+}
+
+func (o *PurchaseRepositoryGetByUserIDAndPeriodOut) Exists() bool {
+	return o.Purchases != nil
+}
+
 type PurchaseRepository interface {
 	Save(ctx context.Context, in PurchaseRepositorySaveIn) (PurchaseRepositorySaveOut, error)
 	GetByUserID(ctx context.Context, in PurchaseRepositoryGetByUserIDIn) (PurchaseRepositoryGetByUserIDOut, error)
 	GetByIDs(ctx context.Context, in PurchaseRepositoryGetByIDsIn) (PurchaseRepositoryGetByIDsOut, error)
 	Delete(ctx context.Context, in PurchaseRepositoryDeleteIn) (PurchaseRepositoryDeleteOut, error)
+	GetAvailablePeriods(ctx context.Context, in PurchaseRepositoryGetAvailablePeriodsIn) (PurchaseRepositoryGetAvailablePeriodsOut, error)
+	GetByUserIDAndPeriod(ctx context.Context, in PurchaseRepositoryGetByUserIDAndPeriodIn) (PurchaseRepositoryGetByUserIDAndPeriodOut, error)
 }

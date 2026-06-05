@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"fms-project/internal/application/usecase"
@@ -27,6 +28,12 @@ func (h *Handler) handleStep(ctx context.Context, userID, chatID int64, msg *tgb
 		h.stepDate(ctx, userID, chatID, msg.Text)
 	case stepWaitOrganisation:
 		h.stepOrganisation(ctx, userID, chatID, msg.Text)
+	case stepEditName:
+		h.stepEditName(ctx, userID, chatID, msg.Text)
+	case stepEditQuantity:
+		h.stepEditQuantity(ctx, userID, chatID, msg.Text)
+	case stepEditPrice:
+		h.stepEditPrice(ctx, userID, chatID, msg.Text)
 	default:
 		h.sendMessage(chatID, "Используйте команды:\n/start - приветствие\n/text - добавить покупку текстом\n/photo - добавить покупку по фото\n/cancel - отмена")
 	}
@@ -238,4 +245,151 @@ func (h *Handler) finalizePurchase(ctx context.Context, userID, chatID int64) {
 	h.state.ClearStep(userID)
 	h.state.ClearManualItemsData(userID)
 	h.sendMessageWithRemoveKeyboard(chatID, "Покупка успешно сохранена!")
+}
+
+func (h *Handler) stepEditName(_ context.Context, userID, chatID int64, text string) {
+	name := strings.TrimSpace(text)
+	if name == "" {
+		h.sendMessage(chatID, "Название не может быть пустым. Введите название затраты:")
+		return
+	}
+
+	// Get state
+	state, exists := h.state.GetEditState(userID)
+	if !exists {
+		h.sendMessageWithRemoveKeyboard(chatID, "Сессия устарела. Начните заново с /edit")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Save new name
+	state.NewName = name
+	h.state.SetEditState(userID, state)
+	h.state.SetStep(userID, stepEditQuantity)
+
+	qtyStr := fmt.Sprintf("%.0f", state.NewQuantity)
+	if state.NewQuantity != float64(int64(state.NewQuantity)) {
+		qtyStr = fmt.Sprintf("%.2f", state.NewQuantity)
+	}
+	replyKeyboard := buildEditReplyKeyboard(qtyStr)
+
+	msg := tgbotapi.NewMessage(chatID, "Введите количество:")
+	msg.ReplyMarkup = replyKeyboard
+	h.bot.Send(msg)
+}
+
+func (h *Handler) stepEditQuantity(_ context.Context, userID, chatID int64, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		h.sendMessage(chatID, "Количество не может быть пустым. Введите количество:")
+		return
+	}
+
+	// Parse quantity
+	quantity, err := strconv.ParseFloat(text, 64)
+	if err != nil || quantity <= 0 {
+		h.sendMessage(chatID, "Некорректное количество. Введите положительное число:")
+		return
+	}
+
+	// Get state
+	state, exists := h.state.GetEditState(userID)
+	if !exists {
+		h.sendMessageWithRemoveKeyboard(chatID, "Сессия устарела. Начните заново с /edit")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Save quantity
+	state.NewQuantity = quantity
+	h.state.SetEditState(userID, state)
+	h.state.SetStep(userID, stepEditPrice)
+
+	// Ask for price with reply keyboard (original price as suggestion)
+	replyKeyboard := buildEditReplyKeyboard(state.OriginalUnitPrice)
+	msg := tgbotapi.NewMessage(chatID, "Введите цену за единицу:")
+	msg.ReplyMarkup = replyKeyboard
+	h.bot.Send(msg)
+}
+
+func (h *Handler) stepEditPrice(ctx context.Context, userID, chatID int64, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		h.sendMessage(chatID, "Цена не может быть пустой. Введите цену за единицу:")
+		return
+	}
+
+	// Parse price
+	price, err := strconv.ParseFloat(text, 64)
+	if err != nil || price < 0 {
+		h.sendMessage(chatID, "Некорректная цена. Введите неотрицательное число:")
+		return
+	}
+
+	// Get state
+	state, exists := h.state.GetEditState(userID)
+	if !exists {
+		h.sendMessage(chatID, "Сессия устарела. Начните заново с /edit")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Execute update
+	_, err = h.useCases.UpdateExpense.Execute(ctx, usecase.UpdateExpenseUseCaseRequest{
+		UserID:     userID,
+		PurchaseID: state.PurchaseID,
+		ExpenseID:  state.ExpenseID,
+		Name:       state.NewName,
+		Quantity:   state.NewQuantity,
+		UnitPrice:  price,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to update expense", "error", err)
+		h.sendMessage(chatID, "Произошла ошибка при обновлении. Попробуйте позже.")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Show success message and return to purchase view
+	h.sendMessageWithRemoveKeyboard(chatID, fmt.Sprintf("Позиция \"%s\" успешно обновлена!", state.NewName))
+
+	// Load and show updated purchase
+	purchasesOut, err := h.useCases.GetPurchasesByPeriod.Execute(ctx, usecase.GetPurchasesByPeriodUseCaseRequest{
+		UserID: userID,
+		Year:   state.SelectedYear,
+		Month:  state.SelectedMonth,
+		Limit:  editPurchasesPerPage,
+		Offset: state.Offset,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to reload purchase", "error", err)
+		h.sendMessage(chatID, "Нажмите /edit для продолжения редактирования.")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	if len(purchasesOut.Purchases) == 0 {
+		h.sendMessage(chatID, "Покупка больше не доступна.")
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Show the updated purchase
+	purchase := purchasesOut.Purchases[0]
+	message := buildEditPurchaseMessage(purchase, state.Offset, purchasesOut.Total)
+	keyboard := buildEditPurchaseKeyboard(state.Offset, purchasesOut.Total, purchase.ID)
+
+	msg := tgbotapi.NewMessage(chatID, message)
+	msg.ReplyMarkup = keyboard
+	sent, err := h.bot.Send(msg)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to send updated purchase", "error", err)
+		h.state.ClearStep(userID)
+		return
+	}
+
+	// Update state
+	state.MessageID = sent.MessageID
+	h.state.SetEditState(userID, state)
+	h.state.SetStep(userID, stepEditSelectPurchase)
 }

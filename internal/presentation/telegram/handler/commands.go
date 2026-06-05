@@ -23,6 +23,8 @@ func (h *Handler) handleCommand(ctx context.Context, userID, chatID int64, msg *
 		h.cmdList(ctx, userID, chatID)
 	case "stats":
 		h.cmdStats(ctx, userID, chatID)
+	case "edit":
+		h.cmdEdit(ctx, userID, chatID)
 	case "cancel":
 		h.cmdCancel(ctx, userID, chatID)
 	}
@@ -91,6 +93,54 @@ func (h *Handler) cmdStats(ctx context.Context, userID, chatID int64) {
 		return
 	}
 	h.state.SetAnalytics(userID, analyticsState{MessageID: sent.MessageID})
+}
+
+func (h *Handler) cmdEdit(ctx context.Context, userID, chatID int64) {
+	// Get available periods (years and months)
+	periodsOut, err := h.useCases.GetAvailablePeriods.Execute(ctx, usecase.GetAvailablePeriodsUseCaseRequest{
+		UserID: userID,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get available periods", "error", err)
+		h.sendMessage(chatID, "Произошла ошибка. Попробуйте позже")
+		return
+	}
+
+	if len(periodsOut.Periods) == 0 {
+		h.sendMessage(chatID, "📭 У вас пока нет покупок для редактирования")
+		return
+	}
+
+	periods := make([]PeriodInfo, len(periodsOut.Periods))
+	for i, p := range periodsOut.Periods {
+		periods[i] = PeriodInfo{
+			Year:   p.Year,
+			Months: p.Months,
+		}
+	}
+
+	// Save state and set step
+	h.state.SetEditState(userID, editState{
+		AvailablePeriods: periods,
+	})
+	h.state.SetStep(userID, stepEditSelectYear)
+
+	// Build year selection keyboard
+	years := extractUniqueYears(periods)
+	keyboard := buildYearSelectionKeyboard(years)
+
+	msg := tgbotapi.NewMessage(chatID, "📅 Выберите год:")
+	msg.ReplyMarkup = keyboard
+	sent, err := h.bot.Send(msg)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to send year selection", "error", err)
+		return
+	}
+
+	// Update state with message ID
+	state, _ := h.state.GetEditState(userID)
+	state.MessageID = sent.MessageID
+	h.state.SetEditState(userID, state)
 }
 
 func (h *Handler) cmdCancel(ctx context.Context, userID, chatID int64) {

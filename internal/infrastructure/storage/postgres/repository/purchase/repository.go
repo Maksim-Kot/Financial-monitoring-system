@@ -1,8 +1,10 @@
 package purchase
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 
 	"fms-project/internal/domain/entity"
 	"fms-project/internal/domain/repository"
@@ -172,6 +174,124 @@ func (r *PurchaseRepository) Delete(ctx context.Context, in repository.PurchaseR
 	return repository.PurchaseRepositoryDeleteOut{}, nil
 }
 
+// GetAvailablePeriods returns distinct years and months for user's purchases
+func (r *PurchaseRepository) GetAvailablePeriods(ctx context.Context, in repository.PurchaseRepositoryGetAvailablePeriodsIn) (repository.PurchaseRepositoryGetAvailablePeriodsOut, error) {
+	db := postgres.CheckTx(ctx, r.client)
+
+	var rows []struct {
+		Year  int `bun:"year"`
+		Month int `bun:"month"`
+	}
+
+	err := db.NewSelect().
+		ColumnExpr("DISTINCT EXTRACT(YEAR FROM purchase_date)::int AS year").
+		ColumnExpr("EXTRACT(MONTH FROM purchase_date)::int AS month").
+		Model((*storageModel.Purchase)(nil)).
+		Where("user_id = ?", in.UserID).
+		Order("year DESC", "month DESC").
+		Scan(ctx, &rows)
+	if err != nil {
+		return repository.PurchaseRepositoryGetAvailablePeriodsOut{}, err
+	}
+
+	// Group months by year
+	yearMap := make(map[int][]int)
+	for _, row := range rows {
+		yearMap[row.Year] = append(yearMap[row.Year], row.Month)
+	}
+
+	// Convert to sorted slice of YearWithMonths
+	periods := make([]repository.YearWithMonths, 0, len(yearMap))
+	for year, months := range yearMap {
+		periods = append(periods, repository.YearWithMonths{
+			Year:   year,
+			Months: months,
+		})
+	}
+
+	// Sort by year descending
+	slices.SortFunc(periods, func(a, b repository.YearWithMonths) int {
+		return cmp.Compare(b.Year, a.Year)
+	})
+
+	return repository.PurchaseRepositoryGetAvailablePeriodsOut{
+		Periods: periods,
+	}, nil
+}
+
+// GetByUserIDAndPeriod returns purchases for a specific year and month with pagination
+func (r *PurchaseRepository) GetByUserIDAndPeriod(ctx context.Context, in repository.PurchaseRepositoryGetByUserIDAndPeriodIn) (repository.PurchaseRepositoryGetByUserIDAndPeriodOut, error) {
+	db := postgres.CheckTx(ctx, r.client)
+
+	// Build date range for the specified year and month
+	startDate := fmt.Sprintf("%04d-%02d-01", in.Year, in.Month)
+	endMonth := in.Month + 1
+	endYear := in.Year
+	if endMonth > 12 {
+		endMonth = 1
+		endYear++
+	}
+	endDate := fmt.Sprintf("%04d-%02d-01", endYear, endMonth)
+
+	total, err := db.NewSelect().
+		Model((*storageModel.Purchase)(nil)).
+		Where("user_id = ?", in.UserID).
+		Where("purchase_date >= ? AND purchase_date < ?", startDate, endDate).
+		Count(ctx)
+	if err != nil {
+		return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{}, err
+	}
+
+	var models []storageModel.Purchase
+	query := db.NewSelect().
+		Model(&models).
+		Where("user_id = ?", in.UserID).
+		Where("purchase_date >= ? AND purchase_date < ?", startDate, endDate).
+		Order("purchase_date DESC", "created_at DESC")
+
+	if in.Limit > 0 {
+		query = query.Limit(in.Limit)
+	}
+	if in.Offset > 0 {
+		query = query.Offset(in.Offset)
+	}
+
+	if err := query.Scan(ctx); err != nil {
+		return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{}, err
+	}
+
+	if len(models) == 0 {
+		return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{
+			Purchases: nil,
+			Total:     total,
+		}, nil
+	}
+
+	// Get full purchases with expenses
+	purchases := make([]entity.Purchase, 0, len(models))
+	for _, m := range models {
+		purchase, err := storageModel.PurchaseToEntity(m)
+		if err != nil {
+			return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{}, fmt.Errorf("mapping purchase: %w", err)
+		}
+
+		expenses, err := r.getExpenses(ctx, db, purchase.ID)
+		if err != nil {
+			return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{}, err
+		}
+
+		for _, e := range expenses {
+			purchase.AddExpense(e)
+		}
+		purchases = append(purchases, purchase)
+	}
+
+	return repository.PurchaseRepositoryGetByUserIDAndPeriodOut{
+		Purchases: purchases,
+		Total:     total,
+	}, nil
+}
+
 func (r *PurchaseRepository) exists(ctx context.Context, db bun.IDB, id valueobject.UUID) (bool, error) {
 	count, err := db.NewSelect().
 		Model((*storageModel.Purchase)(nil)).
@@ -234,7 +354,7 @@ func (r *PurchaseRepository) syncExpenses(ctx context.Context, db bun.IDB, p *en
 		return err
 	}
 
-	// map для быстрого доступа
+	// map for fast access
 	modelsMap := make(map[string]storageModel.Expense)
 	for _, m := range models {
 		modelsMap[m.ID.String()] = m

@@ -24,6 +24,10 @@ type UseCasesContainer struct {
 
 	GetAnalytics shared.UseCase[usecase.GetAnalyticsUseCaseRequest, usecase.GetAnalyticsUseCaseResponse]
 
+	GetAvailablePeriods  shared.UseCase[usecase.GetAvailablePeriodsUseCaseRequest, usecase.GetAvailablePeriodsUseCaseResponse]
+	GetPurchasesByPeriod shared.UseCase[usecase.GetPurchasesByPeriodUseCaseRequest, usecase.GetPurchasesByPeriodUseCaseResponse]
+	UpdateExpense        shared.UseCase[usecase.UpdateExpenseUseCaseRequest, usecase.UpdateExpenseUseCaseResponse]
+
 	CancelScenario shared.UseCase[usecase.CancelScenarioUseCaseRequest, usecase.CancelScenarioUseCaseResponse]
 }
 
@@ -110,24 +114,42 @@ func NewUseCasesContainer(cfg *UseCasesContainerConfig) *UseCasesContainer {
 		InsightGenerator: cfg.Gateways.InsightGenerator,
 	})
 
+	getAvailablePeriodsUseCase := usecase.NewGetAvailablePeriodsUseCase(&usecase.GetAvailablePeriodsUseCaseConfig{
+		Logger:             cfg.Logger,
+		PurchaseRepository: cfg.Repositories.Purchases,
+	})
+
+	getPurchasesByPeriodUseCase := usecase.NewGetPurchasesByPeriodUseCase(&usecase.GetPurchasesByPeriodUseCaseConfig{
+		Logger:             cfg.Logger,
+		PurchaseRepository: cfg.Repositories.Purchases,
+	})
+
+	updateExpenseUseCase := usecase.NewUpdateExpenseUseCase(&usecase.UpdateExpenseUseCaseConfig{
+		Logger:             cfg.Logger,
+		PurchaseRepository: cfg.Repositories.Purchases,
+	})
+
 	cancelScenarioUseCase := usecase.NewCancelScenarioUseCase(&usecase.CancelScenarioUseCaseConfig{
 		Logger:          cfg.Logger,
 		StateRepository: cfg.Repositories.UserState,
 	})
 
 	return &UseCasesContainer{
-		EnsureCategories:  ensureCategoriesUseCase,
-		TextScenario:      textScenarioUseCase,
-		PhotoScenario:     photoScenarioUseCase,
-		ManualAddItem:     manualAddItemUseCase,
-		ClassifyCategory:  classifyCategoryUseCase,
-		AddPurchaseDate:   addPurchaseDateUseCase,
-		AddOrganisation:   addOrganisationUseCase,
-		FinalizeScenario:  finalizeScenarioUseCase,
-		ListScenario:      listScenarioUseCase,
-		ListOrganisations: listOrganisationsUseCase,
-		SaveOrganisation:  saveOrganisationUseCase,
-		GetAnalytics:      getAnalyticsUseCase,
-		CancelScenario:    cancelScenarioUseCase,
+		EnsureCategories:     ensureCategoriesUseCase,
+		TextScenario:         textScenarioUseCase,
+		PhotoScenario:        photoScenarioUseCase,
+		ManualAddItem:        manualAddItemUseCase,
+		ClassifyCategory:     classifyCategoryUseCase,
+		AddPurchaseDate:      addPurchaseDateUseCase,
+		AddOrganisation:      addOrganisationUseCase,
+		FinalizeScenario:     finalizeScenarioUseCase,
+		ListScenario:         listScenarioUseCase,
+		ListOrganisations:    listOrganisationsUseCase,
+		SaveOrganisation:     saveOrganisationUseCase,
+		GetAnalytics:         getAnalyticsUseCase,
+		GetAvailablePeriods:  getAvailablePeriodsUseCase,
+		GetPurchasesByPeriod: getPurchasesByPeriodUseCase,
+		UpdateExpense:        updateExpenseUseCase,
+		CancelScenario:       cancelScenarioUseCase,
 	}
 }

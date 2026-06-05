@@ -257,6 +257,205 @@ func buildNoDataKeyboard() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+// ==================== Edit Scenario View Builders ====================
+
+func buildYearSelectionKeyboard(years []int) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// Create rows with 3 buttons each
+	for i := 0; i < len(years); i += 3 {
+		var row []tgbotapi.InlineKeyboardButton
+		for j := 0; j < 3 && i+j < len(years); j++ {
+			year := years[i+j]
+			callbackData := fmt.Sprintf("%s%d", callbackEditYearPrefix, year)
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+				strconv.Itoa(year),
+				callbackData,
+			))
+		}
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("❌ Отмена", string(callbackEditFinish)),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func buildMonthSelectionKeyboard(year int, months []int) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// Create rows with 3 buttons each
+	for i := 0; i < len(months); i += 3 {
+		var row []tgbotapi.InlineKeyboardButton
+		for j := 0; j < 3 && i+j < len(months); j++ {
+			month := months[i+j]
+			monthName := monthNames[month]
+			if monthName == "" {
+				monthName = strconv.Itoa(month)
+			}
+			callbackData := fmt.Sprintf("%s%d_%d", callbackEditMonthPrefix, year, month)
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+				monthName,
+				callbackData,
+			))
+		}
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("◀️ К годам", string(callbackEditBackToYears)),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func buildEditPurchaseMessage(purchase entity.Purchase, offset, total int) string {
+	var b strings.Builder
+
+	pageNum := offset/editPurchasesPerPage + 1
+	totalPages := (total + editPurchasesPerPage - 1) / editPurchasesPerPage
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	orgName := strings.TrimSpace(purchase.OrganisationName)
+	if orgName == "" {
+		orgName = "не указано"
+	}
+
+	fmt.Fprintf(&b, "📝 Покупка %d из %d:\n\n", pageNum, totalPages)
+	fmt.Fprintf(&b, "🏪 %s\n", orgName)
+	fmt.Fprintf(&b, "Дата: %s\n\n", purchase.PurchaseDate.Format("02.01.2006"))
+
+	expenses := purchase.Expenses()
+	if len(expenses) > 0 {
+		b.WriteString("🛒 Позиции:\n")
+		for i, expense := range expenses {
+			total, err := expense.TotalPrice()
+			priceStr := "?"
+			if err == nil {
+				priceStr = total.DecimalString()
+			}
+
+			qty := formatQuantity(expense.Quantity)
+			name := strings.TrimSpace(expense.Name)
+			if name == "" {
+				name = "неизвестно"
+			}
+
+			fmt.Fprintf(&b, "%d. %s | %s шт. | %s BYN\n", i+1, name, qty, priceStr)
+		}
+		b.WriteString("\n")
+	}
+
+	totalPrice, err := purchase.TotalPrice()
+	if err == nil {
+		fmt.Fprintf(&b, "💰 Итого: %s BYN", totalPrice.DecimalString())
+	}
+
+	return b.String()
+}
+
+func buildEditPurchaseKeyboard(offset, total int, purchaseID valueobject.UUID) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// Navigation row: Prev, Edit, Next
+	var navRow []tgbotapi.InlineKeyboardButton
+
+	if offset > 0 {
+		navRow = append(navRow, tgbotapi.NewInlineKeyboardButtonData(
+			"◀️ Назад",
+			string(callbackEditPrev),
+		))
+	}
+
+	// Edit button with purchase ID
+	editCallback := fmt.Sprintf("%s%s", callbackEditSelectPurchase, purchaseID.String())
+	navRow = append(navRow, tgbotapi.NewInlineKeyboardButtonData(
+		"✏️ Изменить",
+		editCallback,
+	))
+
+	if offset+editPurchasesPerPage < total {
+		navRow = append(navRow, tgbotapi.NewInlineKeyboardButtonData(
+			"Вперед ▶️",
+			string(callbackEditNext),
+		))
+	}
+
+	if len(navRow) > 0 {
+		rows = append(rows, navRow)
+	}
+
+	// Jump row: -5, Finish, +5
+	var jumpRow []tgbotapi.InlineKeyboardButton
+
+	if offset >= editJumpStep {
+		jumpRow = append(jumpRow, tgbotapi.NewInlineKeyboardButtonData(
+			"⏪ -5",
+			string(callbackEditJumpPrev),
+		))
+	}
+
+	jumpRow = append(jumpRow, tgbotapi.NewInlineKeyboardButtonData(
+		"✅ Завершить",
+		string(callbackEditFinish),
+	))
+
+	if offset+editPurchasesPerPage+editJumpStep <= total {
+		jumpRow = append(jumpRow, tgbotapi.NewInlineKeyboardButtonData(
+			"⏩ +5",
+			string(callbackEditJumpNext),
+		))
+	}
+
+	if len(jumpRow) > 0 {
+		rows = append(rows, jumpRow)
+	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func buildExpenseSelectionKeyboard(expenses []entity.Expense) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// Create a button for each expense
+	for _, expense := range expenses {
+		name := strings.TrimSpace(expense.Name)
+		if name == "" {
+			name = "неизвестно"
+		}
+		callbackData := fmt.Sprintf("%s%s", callbackEditSelectExpense, expense.ID.String())
+		rows = append(rows, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(name, callbackData),
+		})
+	}
+
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("❌ Отмена", string(callbackEditCancelExpense)),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func buildEditReplyKeyboard(currentValue string) tgbotapi.ReplyKeyboardMarkup {
+	return tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(currentValue),
+		),
+	)
+}
+
+func extractUniqueYears(periods []PeriodInfo) []int {
+	years := make([]int, len(periods))
+	for i, p := range periods {
+		years[i] = p.Year
+	}
+	return years
+}
+
 func removeReplyKeyboard() tgbotapi.ReplyKeyboardRemove {
 	return tgbotapi.NewRemoveKeyboard(true)
 }
@@ -301,4 +500,19 @@ func separateDeltas(deltas []entity.CategoryDelta) ([]entity.CategoryDelta, []en
 	}
 
 	return increases, decreases
+}
+
+var monthNames = map[int]string{
+	1:  "Январь",
+	2:  "Февраль",
+	3:  "Март",
+	4:  "Апрель",
+	5:  "Май",
+	6:  "Июнь",
+	7:  "Июль",
+	8:  "Август",
+	9:  "Сентябрь",
+	10: "Октябрь",
+	11: "Ноябрь",
+	12: "Декабрь",
 }
