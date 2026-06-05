@@ -49,6 +49,49 @@ const (
 	callbackEditFinish         = "edit_finish"
 )
 
+type callbackHandler func(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int)
+
+func (h *Handler) buildCallbackHandlers() map[callbackAction]callbackHandler {
+	return map[callbackAction]callbackHandler{
+		callbackListPrev:   h.wrapAction(h.handleListCallback, callbackListPrev),
+		callbackListNext:   h.wrapAction(h.handleListCallback, callbackListNext),
+		callbackListFinish: h.wrapAction(h.handleListCallback, callbackListFinish),
+
+		callbackSaveOrgYes: h.wrapAction(h.handleSaveOrgCallback, callbackSaveOrgYes),
+		callbackSaveOrgNo:  h.wrapAction(h.handleSaveOrgCallback, callbackSaveOrgNo),
+
+		callbackAddMoreYes: h.wrapAction(h.handleAddMoreCallback, callbackAddMoreYes),
+		callbackAddMoreNo:  h.wrapAction(h.handleAddMoreCallback, callbackAddMoreNo),
+
+		callbackStatsDay:      h.wrapAction(h.handleStatsPeriodCallback, callbackStatsDay),
+		callbackStatsWeek:     h.wrapAction(h.handleStatsPeriodCallback, callbackStatsWeek),
+		callbackStatsMonth:    h.wrapAction(h.handleStatsPeriodCallback, callbackStatsMonth),
+		callbackStatsHalfYear: h.wrapAction(h.handleStatsPeriodCallback, callbackStatsHalfYear),
+
+		callbackStatsDetailedYes: h.handleStatsDetailedCallback,
+		callbackStatsBack:        h.handleStatsBackCallback,
+		callbackStatsOtherPeriod: h.handleStatsOtherPeriodCallback,
+		callbackStatsClose:       h.handleStatsCloseCallback,
+
+		callbackEditBackToYears:   h.wrapAction(h.handleEditNavigationCallback, callbackEditBackToYears),
+		callbackEditPrev:          h.wrapAction(h.handleEditNavigationCallback, callbackEditPrev),
+		callbackEditNext:          h.wrapAction(h.handleEditNavigationCallback, callbackEditNext),
+		callbackEditJumpPrev:      h.wrapAction(h.handleEditNavigationCallback, callbackEditJumpPrev),
+		callbackEditJumpNext:      h.wrapAction(h.handleEditNavigationCallback, callbackEditJumpNext),
+		callbackEditCancelExpense: h.wrapAction(h.handleEditNavigationCallback, callbackEditCancelExpense),
+		callbackEditFinish:        h.wrapAction(h.handleEditNavigationCallback, callbackEditFinish),
+	}
+}
+
+func (h *Handler) wrapAction(
+	handler func(context.Context, *tgbotapi.CallbackQuery, int64, int64, int, callbackAction),
+	action callbackAction,
+) callbackHandler {
+	return func(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+		handler(ctx, q, userID, chatID, messageID, action)
+	}
+}
+
 func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQuery) {
 	if q.Message == nil {
 		return
@@ -60,41 +103,22 @@ func (h *Handler) handleCallbackQuery(ctx context.Context, q *tgbotapi.CallbackQ
 
 	action := callbackAction(q.Data)
 
-	switch action {
-	case callbackListPrev, callbackListNext, callbackListFinish:
-		h.handleListCallback(ctx, q, userID, chatID, messageID, action)
-	case callbackSaveOrgYes, callbackSaveOrgNo:
-		h.handleSaveOrgCallback(ctx, q, userID, chatID, messageID, action)
-	case callbackAddMoreYes, callbackAddMoreNo:
-		h.handleAddMoreCallback(ctx, q, userID, chatID, messageID, action)
-	case callbackStatsDay, callbackStatsWeek, callbackStatsMonth, callbackStatsHalfYear:
-		h.handleStatsPeriodCallback(ctx, q, userID, chatID, messageID, action)
-	case callbackStatsDetailedYes:
-		h.handleStatsDetailedCallback(ctx, q, userID, chatID, messageID)
-	case callbackStatsBack:
-		h.handleStatsBackCallback(ctx, q, userID, chatID, messageID)
-	case callbackStatsOtherPeriod:
-		h.handleStatsOtherPeriodCallback(ctx, q, userID, chatID, messageID)
-	case callbackStatsClose:
-		h.handleStatsCloseCallback(ctx, q, userID, chatID, messageID)
+	if handler, ok := h.callbackHandlers[action]; ok {
+		handler(ctx, q, userID, chatID, messageID)
+		return
+	}
+
+	switch {
+	case strings.HasPrefix(q.Data, callbackEditYearPrefix):
+		h.handleEditYearCallback(ctx, q, userID, chatID, messageID)
+	case strings.HasPrefix(q.Data, callbackEditMonthPrefix):
+		h.handleEditMonthCallback(ctx, q, userID, chatID, messageID)
+	case strings.HasPrefix(q.Data, callbackEditSelectPurchase):
+		h.handleEditSelectPurchaseCallback(ctx, q, userID, chatID, messageID)
+	case strings.HasPrefix(q.Data, callbackEditSelectExpense):
+		h.handleEditSelectExpenseCallback(ctx, q, userID, chatID, messageID)
 	default:
-		// Check for dynamic edit callbacks
-		if strings.HasPrefix(q.Data, callbackEditYearPrefix) {
-			h.handleEditYearCallback(ctx, q, userID, chatID, messageID)
-		} else if strings.HasPrefix(q.Data, callbackEditMonthPrefix) {
-			h.handleEditMonthCallback(ctx, q, userID, chatID, messageID)
-		} else if strings.HasPrefix(q.Data, callbackEditSelectPurchase) {
-			h.handleEditSelectPurchaseCallback(ctx, q, userID, chatID, messageID)
-		} else if strings.HasPrefix(q.Data, callbackEditSelectExpense) {
-			h.handleEditSelectExpenseCallback(ctx, q, userID, chatID, messageID)
-		} else if action == callbackEditBackToYears || action == callbackEditPrev ||
-			action == callbackEditNext || action == callbackEditJumpPrev ||
-			action == callbackEditJumpNext || action == callbackEditCancelExpense ||
-			action == callbackEditFinish {
-			h.handleEditNavigationCallback(ctx, q, userID, chatID, messageID, action)
-		} else {
-			h.answerCallback(q.ID, "Неизвестная команда")
-		}
+		h.answerCallback(q.ID, "Неизвестная команда")
 	}
 }
 
