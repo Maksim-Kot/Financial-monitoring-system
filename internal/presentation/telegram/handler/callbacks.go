@@ -379,6 +379,7 @@ func (h *Handler) handleStatsCloseCallback(ctx context.Context, q *tgbotapi.Call
 // ==================== Edit Scenario Callback Handlers ====================
 
 func (h *Handler) handleEditYearCallback(ctx context.Context, q *tgbotapi.CallbackQuery, userID, chatID int64, messageID int) {
+	_ = ctx
 	// Parse year from callback data
 	prefix := callbackEditYearPrefix
 	yearStr := strings.TrimPrefix(q.Data, prefix)

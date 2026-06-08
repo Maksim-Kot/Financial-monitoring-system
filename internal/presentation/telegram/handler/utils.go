@@ -34,6 +34,10 @@ func (h *Handler) downloadLargestPhoto(ctx context.Context, photos []tgbotapi.Ph
 	return h.httpClient.Get(ctx, url)
 }
 
+func normalizeDecimalSeparator(s string) string {
+	return strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
+}
+
 func isOrganisationExists(orgName string, organisations []entity.Organisation) bool {
 	searchName := strings.ToLower(orgName)
 	for _, org := range organisations {

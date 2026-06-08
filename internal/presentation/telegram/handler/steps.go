@@ -286,9 +286,12 @@ func (h *Handler) stepEditQuantity(_ context.Context, userID, chatID int64, text
 	}
 
 	// Parse quantity
-	quantity, err := strconv.ParseFloat(text, 64)
-	if err != nil || quantity <= 0 {
-		h.sendMessage(chatID, "Некорректное количество. Введите положительное число:")
+	quantity, err := strconv.ParseFloat(normalizeDecimalSeparator(text), 64)
+	if err != nil {
+		h.sendMessage(chatID, "Некорректный формат количества. Введите число:")
+		return
+	} else if quantity <= 0 {
+		h.sendMessage(chatID, "Некорректное количество. Введите неотрицательное число:")
 		return
 	}
 
@@ -320,8 +323,11 @@ func (h *Handler) stepEditPrice(ctx context.Context, userID, chatID int64, text 
 	}
 
 	// Parse price
-	price, err := strconv.ParseFloat(text, 64)
-	if err != nil || price < 0 {
+	price, err := strconv.ParseFloat(normalizeDecimalSeparator(text), 64)
+	if err != nil {
+		h.sendMessage(chatID, "Некорректный формат цены. Введите число:")
+		return
+	} else if price <= 0 {
 		h.sendMessage(chatID, "Некорректная цена. Введите неотрицательное число:")
 		return
 	}

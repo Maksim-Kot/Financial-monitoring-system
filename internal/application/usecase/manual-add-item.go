@@ -87,15 +87,19 @@ func (uc *ManualAddItemUseCase) parseItem(input string) (entity.DraftItem, error
 		return entity.DraftItem{}, domainError.New(domainError.StatusValidation, "name cannot be empty")
 	}
 
-	quantityStr := strings.TrimSpace(parts[1])
+	quantityStr := normalizeDecimalSeparator(strings.TrimSpace(parts[1]))
 	quantity, err := strconv.ParseFloat(quantityStr, 64)
-	if err != nil || quantity <= 0 {
+	if err != nil {
+		return entity.DraftItem{}, domainError.New(domainError.StatusValidation, "invalid quantity")
+	} else if quantity <= 0 {
 		return entity.DraftItem{}, domainError.New(domainError.StatusValidation, "quantity must be a positive number")
 	}
 
-	unitPriceStr := strings.TrimSpace(parts[2])
+	unitPriceStr := normalizeDecimalSeparator(strings.TrimSpace(parts[2]))
 	unitPrice, err := strconv.ParseFloat(unitPriceStr, 64)
-	if err != nil || unitPrice < 0 {
+	if err != nil {
+		return entity.DraftItem{}, domainError.New(domainError.StatusValidation, "invalid price")
+	} else if unitPrice <= 0 {
 		return entity.DraftItem{}, domainError.New(domainError.StatusValidation, "price must be a positive number")
 	}
 
@@ -105,4 +109,8 @@ func (uc *ManualAddItemUseCase) parseItem(input string) (entity.DraftItem, error
 		UnitPrice: unitPrice,
 		Category:  entity.Category{},
 	}, nil
+}
+
+func normalizeDecimalSeparator(s string) string {
+	return strings.ReplaceAll(s, ",", ".")
 }
