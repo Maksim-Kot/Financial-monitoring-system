@@ -394,7 +394,7 @@ func buildEditPurchaseKeyboard(offset, total int, purchaseID valueobject.UUID) t
 
 	if offset >= editJumpStep {
 		jumpRow = append(jumpRow, tgbotapi.NewInlineKeyboardButtonData(
-			"⏪ -5",
+			fmt.Sprintf("⏪ Назад (на %d)", editJumpStep),
 			string(callbackEditJumpPrev),
 		))
 	}
@@ -406,7 +406,7 @@ func buildEditPurchaseKeyboard(offset, total int, purchaseID valueobject.UUID) t
 
 	if offset+editPurchasesPerPage+editJumpStep <= total {
 		jumpRow = append(jumpRow, tgbotapi.NewInlineKeyboardButtonData(
-			"⏩ +5",
+			fmt.Sprintf("Вперед (на %d) ⏩", editJumpStep),
 			string(callbackEditJumpNext),
 		))
 	}
