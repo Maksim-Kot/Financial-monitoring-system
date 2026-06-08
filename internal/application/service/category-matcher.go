@@ -112,6 +112,7 @@ func buildDictionary() []dictionaryEntry {
 		"йогурт":           {name: "Продукты", weight: 10},
 		"сыр":              {name: "Продукты", weight: 10},
 		"творог":           {name: "Продукты", weight: 10},
+		"творож":           {name: "Продукты", weight: 10},
 		"масло":            {name: "Продукты", weight: 10},
 		"яйц":              {name: "Продукты", weight: 10},
 		"мяс":              {name: "Продукты", weight: 10},
